@@ -216,8 +216,9 @@ export default function PublicDevicePage() {
           <div className="flex items-center gap-3">
             <CheckCircle size={20} className="text-green-600 dark:text-green-400 flex-shrink-0" />
             <p className="text-green-800 dark:text-green-200 text-sm">
-              <strong>The owner has been notified</strong> that someone scanned this code.
-              You can leave a message below to help return this item.
+              <strong>Leave a message!</strong> to help return this item!
+              <br><br>
+              <strong>The owner was notified</strong> that you scanned the qr code, and will receive notifications for messages sent.
             </p>
           </div>
         </div>
