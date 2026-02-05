@@ -2,6 +2,10 @@
 
 A self-hosted device tracking application with QR codes and instant notifications. Track your valuables with unique QR codes and get notified when someone finds them.
 
+### FYI! Heavy assistance from LLMs for coding
+
+Concept piece. Hasn't had a security review.
+
 ## Features
 
 - **Admin Dashboard**: Secure login to manage all your devices
@@ -70,7 +74,8 @@ docker-compose exec app npx prisma db seed
 
 ### 5. Access the App
 
-Open http://localhost:3000 and login with:
+Open <http://localhost:3000> and login with:
+
 - **Email**: `admin@lostfound.local` (or `ADMIN_EMAIL`)
 - **Password**: `admin123` (or `ADMIN_PASSWORD`)
 
@@ -150,15 +155,15 @@ Lost & Found uses [Apprise](https://github.com/caronc/apprise) URLs for notifica
 
 **Popular services:**
 
-| Service | URL Format |
-|---------|------------|
-| ntfy.sh | `ntfy://your-topic` or `https://ntfy.sh/your-topic` |
-| Telegram | `tgram://bottoken/ChatID` |
-| Discord | `discord://webhook_id/webhook_token` |
-| Gotify | `gotify://hostname/token` |
-| Pushover | `pover://user@token` |
-| Email | `mailto://user:pass@gmail.com` |
-| Slack | `slack://TokenA/TokenB/TokenC` |
+| Service  | URL Format                                          |
+| -------- | --------------------------------------------------- |
+| ntfy.sh  | `ntfy://your-topic` or `https://ntfy.sh/your-topic` |
+| Telegram | `tgram://bottoken/ChatID`                           |
+| Discord  | `discord://webhook_id/webhook_token`                |
+| Gotify   | `gotify://hostname/token`                           |
+| Pushover | `pover://user@token`                                |
+| Email    | `mailto://user:pass@gmail.com`                      |
+| Slack    | `slack://TokenA/TokenB/TokenC`                      |
 
 See the [Apprise Wiki](https://github.com/caronc/apprise/wiki) for 80+ more services.
 
@@ -266,11 +271,13 @@ When set, all QR codes generated from the admin dashboard will point to the publ
 Deploy the same codebase twice with different configurations:
 
 **Public Instance** (`found.example.com`):
+
 - Serves: `/device/*` routes only
 - Receives: QR code scans and finder messages
 - Can restrict access using reverse proxy rules
 
 **Admin Instance** (`admin.example.com`):
+
 - Serves: `/dashboard/*`, `/login`, `/api/*` routes
 - Set `PUBLIC_PORTAL_URL=https://found.example.com`
 - QR codes will automatically use the public domain
@@ -278,19 +285,20 @@ Deploy the same codebase twice with different configurations:
 Both instances connect to the **same database**.
 
 **Nginx example for public instance:**
+
 ```nginx
 server {
     server_name found.example.com;
-    
+
     # Only allow public device pages
     location /device {
         proxy_pass http://localhost:3001;
     }
-    
+
     location /api/public {
         proxy_pass http://localhost:3001;
     }
-    
+
     # Block everything else
     location / {
         return 404;
@@ -348,20 +356,20 @@ yarn dev
 
 ## Environment Variables Reference
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | - | PostgreSQL connection string |
-| `POSTGRES_PASSWORD` | Docker | `changeme` | PostgreSQL password (docker-compose) |
-| `NEXTAUTH_URL` | Yes | - | Your app's public URL |
-| `NEXTAUTH_SECRET` | Yes | - | Session encryption secret |
-| `STORAGE_TYPE` | No | `local` | `local` or `s3` |
-| `AWS_BUCKET_NAME` | S3 only | - | S3 bucket name |
-| `AWS_REGION` | S3 only | `us-east-1` | AWS region |
-| `AWS_ACCESS_KEY_ID` | S3 only | - | AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | S3 only | - | AWS secret key |
-| `AWS_ENDPOINT` | S3-compat | - | Custom S3 endpoint (MinIO, etc.) |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | - | Cloudflare Turnstile site key |
-| `TURNSTILE_SECRET_KEY` | No | - | Cloudflare Turnstile secret |
+| Variable                         | Required  | Default     | Description                          |
+| -------------------------------- | --------- | ----------- | ------------------------------------ |
+| `DATABASE_URL`                   | Yes       | -           | PostgreSQL connection string         |
+| `POSTGRES_PASSWORD`              | Docker    | `changeme`  | PostgreSQL password (docker-compose) |
+| `NEXTAUTH_URL`                   | Yes       | -           | Your app's public URL                |
+| `NEXTAUTH_SECRET`                | Yes       | -           | Session encryption secret            |
+| `STORAGE_TYPE`                   | No        | `local`     | `local` or `s3`                      |
+| `AWS_BUCKET_NAME`                | S3 only   | -           | S3 bucket name                       |
+| `AWS_REGION`                     | S3 only   | `us-east-1` | AWS region                           |
+| `AWS_ACCESS_KEY_ID`              | S3 only   | -           | AWS access key                       |
+| `AWS_SECRET_ACCESS_KEY`          | S3 only   | -           | AWS secret key                       |
+| `AWS_ENDPOINT`                   | S3-compat | -           | Custom S3 endpoint (MinIO, etc.)     |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No        | -           | Cloudflare Turnstile site key        |
+| `TURNSTILE_SECRET_KEY`           | No        | -           | Cloudflare Turnstile secret          |
 
 ---
 
