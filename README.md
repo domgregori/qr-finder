@@ -1,4 +1,4 @@
-# Lost & Found Tracker
+# QR Finder
 
 A self-hosted device tracking application with QR codes and instant notifications. Track your valuables with unique QR codes and get notified when someone finds them.
 
@@ -22,13 +22,13 @@ Concept piece. Hasn't had a security review.
 
 ## Quick Start (Docker - Recommended)
 
-The easiest way to run Lost & Found Tracker is with Docker Compose. This includes PostgreSQL and uses local file storage by default - no external services required!
+The easiest way to run QR Finder is with Docker Compose. This includes PostgreSQL and uses local file storage by default - no external services required!
 
 ### 1. Clone and Configure
 
 ```bash
 git clone <your-repo-url>
-cd lost_and_found_tracker/nextjs_space
+cd qr-finder/nextjs_space
 cp .env.example .env
 ```
 
@@ -151,7 +151,7 @@ DATABASE_URL=postgresql://user:password@your-host:5432/lostfound?sslmode=require
 
 ### Notification Services
 
-Lost & Found uses [Apprise](https://github.com/caronc/apprise) URLs for notifications. Each device can have its own notification endpoint.
+QR Finder uses [Apprise](https://github.com/caronc/apprise) URLs for notifications. Each device can have its own notification endpoint.
 
 **Popular services:**
 
@@ -198,8 +198,8 @@ sudo dpkg -i cloudflared-linux-amd64.deb
 cloudflared tunnel login
 
 # Create tunnel
-cloudflared tunnel create lostfound
-cloudflared tunnel route dns lostfound lost.yourdomain.com
+cloudflared tunnel create qrfinder
+cloudflared tunnel route dns qrfinder qrfinder.yourdomain.com
 
 # Create config (~/.cloudflared/config.yml)
 echo 'tunnel: <your-tunnel-id>
@@ -210,7 +210,7 @@ ingress:
   - service: http_status:404' > ~/.cloudflared/config.yml
 
 # Run (or set up as systemd service)
-cloudflared tunnel run lostfound
+cloudflared tunnel run qrfinder
 ```
 
 ### Option 2: Reverse Proxy (Nginx/Caddy)
@@ -258,7 +258,7 @@ Set the `PUBLIC_PORTAL_URL` environment variable on your **admin instance** to p
 
 ```bash
 # On admin instance (.env)
-PUBLIC_PORTAL_URL=https://found.example.com
+PUBLIC_PORTAL_URL=https://qrfinder.example.com
 NEXTAUTH_URL=https://admin.example.com
 ```
 
@@ -270,7 +270,7 @@ When set, all QR codes generated from the admin dashboard will point to the publ
 
 Deploy the same codebase twice with different configurations:
 
-**Public Instance** (`found.example.com`):
+**Public Instance** (`qrfinder.example.com`):
 
 - Serves: `/device/*` routes only
 - Receives: QR code scans and finder messages
@@ -279,7 +279,7 @@ Deploy the same codebase twice with different configurations:
 **Admin Instance** (`admin.example.com`):
 
 - Serves: `/dashboard/*`, `/login`, `/api/*` routes
-- Set `PUBLIC_PORTAL_URL=https://found.example.com`
+- Set `PUBLIC_PORTAL_URL=https://qrfinder.example.com`
 - QR codes will automatically use the public domain
 
 Both instances connect to the **same database**.
@@ -288,7 +288,7 @@ Both instances connect to the **same database**.
 
 ```nginx
 server {
-    server_name found.example.com;
+    server_name qrfinder.example.com;
 
     # Only allow public device pages
     location /device {
