@@ -1,0 +1,49 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Device {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  photoUrl    String?
+  isPublicPhoto Boolean @default(false)
+  appriseUrl  String?
+  uniqueCode  String    @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  messages    Message[]
+}
+
+model Message {
+  id           String   @id @default(cuid())
+  deviceId     String
+  nickname     String
+  message      String
+  isOwnerReply Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model AppriseEndpoint {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
