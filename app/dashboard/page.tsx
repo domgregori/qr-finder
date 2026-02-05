@@ -121,6 +121,7 @@ export default function DashboardPage() {
     }
   };
 
+
   const filteredDevices = (devices ?? []).filter((device) =>
     device?.name?.toLowerCase()?.includes?.(searchTerm?.toLowerCase?.() ?? "") ??
     device?.description?.toLowerCase()?.includes?.(searchTerm?.toLowerCase?.() ?? "")
@@ -151,14 +152,25 @@ export default function DashboardPage() {
             </Link>
             <div className="flex items-center gap-4">
               <ThemeToggle />
-              <Link
-                href="/dashboard/notifications"
-                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                title="Notifications"
-              >
-                <Bell size={20} />
-              </Link>
-              <span className="text-sm text-gray-600 dark:text-gray-400">{session?.user?.email ?? ""}</span>
+              <details className="relative">
+                <summary className="list-none cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
+                  {session?.user?.email ?? ""}
+                </summary>
+                <div className="absolute right-0 mt-2 w-56 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg overflow-hidden z-50">
+                  <Link
+                    href="/dashboard/account"
+                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    Account Settings
+                  </Link>
+                  <Link
+                    href="/dashboard/notifications"
+                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    Notifications
+                  </Link>
+                </div>
+              </details>
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
                 className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
@@ -267,6 +279,7 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+
       </main>
 
       {/* Delete Confirmation Modal */}
