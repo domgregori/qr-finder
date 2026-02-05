@@ -54,6 +54,12 @@ DATABASE_URL=postgresql://lostfound:your-secure-password@db:5432/lostfound
 ADMIN_EMAIL=admin@lostfound.local
 ADMIN_PASSWORD=admin123
 ADMIN_NAME=Admin
+
+# Optional: set custom DNS server for Docker container
+DOCKER_DNS=
+
+# Optional: add custom host mapping for ntfy in Docker (format: host:ip)
+NTFY_EXTRA_HOSTS=
 ```
 
 ### 3. Start the Application
