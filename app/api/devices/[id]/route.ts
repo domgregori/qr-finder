@@ -51,7 +51,14 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name: rawName, description: rawDescription, appriseUrl: rawAppriseUrl, photoUrl, isPublicPhoto } = body ?? {};
+    const {
+      name: rawName,
+      description: rawDescription,
+      appriseUrl: rawAppriseUrl,
+      photoUrl,
+      isPublicPhoto,
+      qrSettings
+    } = body ?? {};
 
     // Sanitize inputs
     const name = rawName ? sanitizeDeviceName(rawName) : undefined;
@@ -65,7 +72,8 @@ export async function PUT(
         description,
         appriseUrl,
         photoUrl: photoUrl ?? undefined,
-        isPublicPhoto: isPublicPhoto ?? undefined
+        isPublicPhoto: isPublicPhoto ?? undefined,
+        qrSettings: qrSettings !== undefined ? qrSettings : undefined
       }
     });
 

@@ -1,13 +1,48 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
 import { Download, Settings, Palette, Type, Maximize2, Sparkles, Frame, Image as ImageIcon, Square, Circle } from "lucide-react";
+import { toast } from "sonner";
 
 interface QRCodeGeneratorProps {
   url: string;
   deviceName: string;
+  initialSettings?: Partial<QrSettings> | null;
+  onSettingsChange?: (settings: QrSettings) => void;
+  showThemeSave?: boolean;
+  profileBlurb?: string | null;
+  profileAvatarUrl?: string | null;
+  profileAvatarShape?: "circle" | "rounded" | "square" | null;
 }
+
+export type QrSettings = {
+  size: number;
+  fgColor: string;
+  bgColor: string;
+  accentColor: string;
+  overlayText: string;
+  secondaryText: string;
+  includeLabel: boolean;
+  qrLevel: "L" | "M" | "Q" | "H";
+  activeTheme: string | null;
+  frameStyle: string;
+  centerIcon: string;
+  centerText: string;
+  centerTextSize: number;
+  centerTextColor: string;
+  showGradientBg: boolean;
+  gradientAngle: number;
+  dotShape: string;
+  markerBorderShape: string;
+  markerCenterShape: string;
+  centerBgShape: string;
+  centerPaddingH: number;
+  centerPaddingV: number;
+  shadowDepth: number;
+  shadowRounded: boolean;
+  exportBackground: "white" | "transparent";
+};
 
 // Preset themes
 const THEMES = [
@@ -19,6 +54,11 @@ const THEMES = [
   { name: "Retro", fg: "#5f0f40", bg: "#fbf8cc", accent: "#9a031e" },
   { name: "Neon", fg: "#39ff14", bg: "#0d0d0d", accent: "#ff00ff" },
   { name: "Coral", fg: "#ff6b6b", bg: "#fff5f5", accent: "#ee5a5a" },
+  { name: "Ice", fg: "#1d4ed8", bg: "#e0f2fe", accent: "#38bdf8" },
+  { name: "Moss", fg: "#365314", bg: "#ecfccb", accent: "#84cc16" },
+  { name: "Desert", fg: "#7c2d12", bg: "#ffedd5", accent: "#fb923c" },
+  { name: "Slate", fg: "#0f172a", bg: "#e2e8f0", accent: "#64748b" },
+  { name: "Berry", fg: "#7f1d1d", bg: "#fee2e2", accent: "#ef4444" },
 ];
 
 // Frame styles
@@ -139,7 +179,7 @@ const CENTER_ICONS = [
   { id: "paw", name: "🐾 Pet", emoji: "🐾" },
 ];
 
-export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
+export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsChange, showThemeSave = true, profileBlurb, profileAvatarUrl, profileAvatarShape }: QRCodeGeneratorProps) {
   const qrRef = useRef<HTMLDivElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState(200);
@@ -164,11 +204,147 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
   const [centerBgShape, setCenterBgShape] = useState("circle");
   const [centerPaddingH, setCenterPaddingH] = useState(8);
   const [centerPaddingV, setCenterPaddingV] = useState(8);
+  const [centerTextSize, setCenterTextSize] = useState(1);
+  const [centerTextColor, setCenterTextColor] = useState("#000000");
+  const [centerTextColorLocked, setCenterTextColorLocked] = useState(true);
+  const [shadowDepth, setShadowDepth] = useState(8);
+  const [shadowRounded, setShadowRounded] = useState(false);
+  const [exportBackground, setExportBackground] = useState<"white" | "transparent">("white");
   const [qrMatrix, setQrMatrix] = useState<boolean[][] | null>(null);
+  const [customThemes, setCustomThemes] = useState<Array<{ id: string; name: string; settings: QrSettings }>>([]);
+  const [themeName, setThemeName] = useState("");
+  const [savingTheme, setSavingTheme] = useState(false);
+  const initializedRef = useRef(false);
+  const settingsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (centerTextColorLocked) {
+      setCenterTextColor(accentColor);
+    }
+  }, [accentColor, centerTextColorLocked]);
+
+  useEffect(() => {
+    const loadThemes = async () => {
+      try {
+        const res = await fetch("/api/qr-themes");
+        if (res.ok) {
+          const data = await res.json();
+          setCustomThemes(data ?? []);
+        }
+      } catch (error) {
+        console.error("Failed to load themes:", error);
+      }
+    };
+    loadThemes();
+  }, []);
+
+  useEffect(() => {
+    if (!initialSettings || initializedRef.current) return;
+
+    if (initialSettings.size !== undefined) setSize(initialSettings.size);
+    if (initialSettings.fgColor) setFgColor(initialSettings.fgColor);
+    if (initialSettings.bgColor) setBgColor(initialSettings.bgColor);
+    if (initialSettings.accentColor) setAccentColor(initialSettings.accentColor);
+    if (initialSettings.overlayText !== undefined) setOverlayText(initialSettings.overlayText);
+    if (initialSettings.secondaryText !== undefined) setSecondaryText(initialSettings.secondaryText);
+    if (initialSettings.includeLabel !== undefined) setIncludeLabel(initialSettings.includeLabel);
+    if (initialSettings.qrLevel) setQrLevel(initialSettings.qrLevel);
+    if (initialSettings.activeTheme !== undefined) setActiveTheme(initialSettings.activeTheme);
+    if (initialSettings.frameStyle) setFrameStyle(initialSettings.frameStyle);
+    if (initialSettings.centerIcon) setCenterIcon(initialSettings.centerIcon);
+    if (initialSettings.centerText !== undefined) setCenterText(initialSettings.centerText);
+    if (initialSettings.centerTextSize !== undefined) setCenterTextSize(initialSettings.centerTextSize);
+    if (initialSettings.centerTextColor) {
+      setCenterTextColor(initialSettings.centerTextColor);
+      setCenterTextColorLocked(false);
+    }
+    if (initialSettings.showGradientBg !== undefined) setShowGradientBg(initialSettings.showGradientBg);
+    if (initialSettings.gradientAngle !== undefined) setGradientAngle(initialSettings.gradientAngle);
+    if (initialSettings.dotShape) setDotShape(initialSettings.dotShape);
+    if (initialSettings.markerBorderShape) setMarkerBorderShape(initialSettings.markerBorderShape);
+    if (initialSettings.markerCenterShape) setMarkerCenterShape(initialSettings.markerCenterShape);
+    if (initialSettings.centerBgShape) setCenterBgShape(initialSettings.centerBgShape);
+    if (initialSettings.centerPaddingH !== undefined) setCenterPaddingH(initialSettings.centerPaddingH);
+    if (initialSettings.centerPaddingV !== undefined) setCenterPaddingV(initialSettings.centerPaddingV);
+    if (initialSettings.shadowDepth !== undefined) setShadowDepth(initialSettings.shadowDepth);
+    if (initialSettings.shadowRounded !== undefined) setShadowRounded(initialSettings.shadowRounded);
+    if (initialSettings.exportBackground) setExportBackground(initialSettings.exportBackground);
+
+    initializedRef.current = true;
+  }, [initialSettings]);
+
+  const currentSettings = useMemo<QrSettings>(() => ({
+    size,
+    fgColor,
+    bgColor,
+    accentColor,
+    overlayText,
+    secondaryText,
+    includeLabel,
+    qrLevel,
+    activeTheme,
+    frameStyle,
+    centerIcon,
+    centerText,
+    centerTextSize,
+    centerTextColor,
+    showGradientBg,
+    gradientAngle,
+    dotShape,
+    markerBorderShape,
+    markerCenterShape,
+    centerBgShape,
+    centerPaddingH,
+    centerPaddingV,
+    shadowDepth,
+    shadowRounded,
+    exportBackground
+  }), [
+    size,
+    fgColor,
+    bgColor,
+    accentColor,
+    overlayText,
+    secondaryText,
+    includeLabel,
+    qrLevel,
+    activeTheme,
+    frameStyle,
+    centerIcon,
+    centerText,
+    centerTextSize,
+    centerTextColor,
+    showGradientBg,
+    gradientAngle,
+    dotShape,
+    markerBorderShape,
+    markerCenterShape,
+    centerBgShape,
+    centerPaddingH,
+    centerPaddingV,
+    shadowDepth,
+    shadowRounded,
+    exportBackground
+  ]);
+
+  useEffect(() => {
+    if (!onSettingsChange) return;
+    if (settingsDebounceRef.current) {
+      clearTimeout(settingsDebounceRef.current);
+    }
+    settingsDebounceRef.current = setTimeout(() => {
+      onSettingsChange(currentSettings);
+    }, 500);
+    return () => {
+      if (settingsDebounceRef.current) {
+        clearTimeout(settingsDebounceRef.current);
+      }
+    };
+  }, [currentSettings, onSettingsChange]);
 
   // Generate QR matrix when URL or level changes
   useEffect(() => {
@@ -479,10 +655,42 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
     setActiveTheme(theme.name);
   };
 
+  const applyThemeSettings = (settings: Partial<QrSettings>, name?: string) => {
+    if (settings.size !== undefined) setSize(settings.size);
+    if (settings.fgColor) setFgColor(settings.fgColor);
+    if (settings.bgColor) setBgColor(settings.bgColor);
+    if (settings.accentColor) setAccentColor(settings.accentColor);
+    if (settings.overlayText !== undefined) setOverlayText(settings.overlayText);
+    if (settings.secondaryText !== undefined) setSecondaryText(settings.secondaryText);
+    if (settings.includeLabel !== undefined) setIncludeLabel(settings.includeLabel);
+    if (settings.qrLevel) setQrLevel(settings.qrLevel);
+    if (settings.frameStyle) setFrameStyle(settings.frameStyle);
+    if (settings.centerIcon) setCenterIcon(settings.centerIcon);
+    if (settings.centerText !== undefined) setCenterText(settings.centerText);
+    if (settings.centerTextSize !== undefined) setCenterTextSize(settings.centerTextSize);
+    if (settings.centerTextColor) {
+      setCenterTextColor(settings.centerTextColor);
+      setCenterTextColorLocked(false);
+    }
+    if (settings.showGradientBg !== undefined) setShowGradientBg(settings.showGradientBg);
+    if (settings.gradientAngle !== undefined) setGradientAngle(settings.gradientAngle);
+    if (settings.dotShape) setDotShape(settings.dotShape);
+    if (settings.markerBorderShape) setMarkerBorderShape(settings.markerBorderShape);
+    if (settings.markerCenterShape) setMarkerCenterShape(settings.markerCenterShape);
+    if (settings.centerBgShape) setCenterBgShape(settings.centerBgShape);
+    if (settings.centerPaddingH !== undefined) setCenterPaddingH(settings.centerPaddingH);
+    if (settings.centerPaddingV !== undefined) setCenterPaddingV(settings.centerPaddingV);
+    if (settings.shadowDepth !== undefined) setShadowDepth(settings.shadowDepth);
+    if (settings.shadowRounded !== undefined) setShadowRounded(settings.shadowRounded);
+    if (settings.exportBackground) setExportBackground(settings.exportBackground);
+    setActiveTheme(name ?? null);
+  };
+
   const getFrameStyle = useCallback(() => {
+    const baseRadius = frameStyle === "rounded" || (frameStyle === "shadow" && shadowRounded) ? "24px" : "0px";
     const baseStyle: React.CSSProperties = {
       padding: "24px",
-      borderRadius: frameStyle === "rounded" ? "24px" : "12px",
+      borderRadius: baseRadius,
     };
 
     switch (frameStyle) {
@@ -495,7 +703,7 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
       case "dashed":
         return { ...baseStyle, border: `3px dashed ${accentColor}` };
       case "shadow":
-        return { ...baseStyle, boxShadow: `8px 8px 0px ${accentColor}`, border: `2px solid ${accentColor}` };
+        return { ...baseStyle, boxShadow: `${shadowDepth}px ${shadowDepth}px 0px ${accentColor}`, border: `2px solid ${accentColor}` };
       case "gradient":
         return { 
           ...baseStyle, 
@@ -509,7 +717,7 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
       default:
         return baseStyle;
     }
-  }, [frameStyle, accentColor, bgColor, fgColor, gradientAngle]);
+  }, [frameStyle, accentColor, bgColor, fgColor, gradientAngle, shadowDepth, shadowRounded]);
 
   const getBackgroundStyle = useCallback(() => {
     if (showGradientBg) {
@@ -534,7 +742,7 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
   const centerContent = centerIcon === "custom" ? centerText : selectedIcon?.emoji || "";
   const hasCenterContent = centerIcon !== "none" && (centerIcon === "custom" ? centerText.trim() !== "" : !!selectedIcon?.emoji);
   const centerPreviewFontSize = centerIcon === "custom"
-    ? Math.min(size / 6, (size / 4) / Math.max(1, centerContent.length / 3))
+    ? Math.max(8, Math.min(size / 6, (size / 4) / Math.max(1, centerContent.length / 3)) * centerTextSize)
     : size / 6;
   const centerPreviewTextWidth = centerIcon === "custom"
     ? Math.max(1, centerContent.length) * (centerPreviewFontSize * 0.6)
@@ -586,16 +794,40 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
     const ctx = exportCanvas.getContext("2d");
     if (!ctx) return;
 
-    // Background
+    // Export background (outside QR)
+    if (exportBackground === "white") {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, totalWidth, totalHeight);
+    } else {
+      ctx.clearRect(0, 0, totalWidth, totalHeight);
+    }
+
+    // QR background (only the QR area, not the full canvas)
     if (showGradientBg) {
-      const gradient = ctx.createLinearGradient(0, 0, totalWidth, totalHeight);
+      const gradient = ctx.createLinearGradient(padding, padding, padding + size, padding + size);
       gradient.addColorStop(0, bgColor);
       gradient.addColorStop(1, lightenColor(bgColor, 20));
       ctx.fillStyle = gradient;
     } else {
       ctx.fillStyle = bgColor;
     }
-    ctx.fillRect(0, 0, totalWidth, totalHeight);
+    ctx.fillRect(padding, padding, size, size);
+
+    const frameRadius = frameStyle === "rounded" || (frameStyle === "shadow" && shadowRounded) ? 24 : 12;
+    const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+      const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + w - radius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+      ctx.lineTo(x + w, y + h - radius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      ctx.lineTo(x + radius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    };
 
     // Frame
     if (frameStyle !== "none") {
@@ -606,24 +838,31 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
       switch (frameStyle) {
         case "simple":
         case "rounded":
-          ctx.strokeRect(frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2);
+          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, frameStyle === "rounded" ? frameRadius : 0);
+          ctx.stroke();
           break;
         case "double":
           ctx.lineWidth = 2;
-          ctx.strokeRect(frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2);
-          ctx.strokeRect(frameMargin + 5, frameMargin + 5, totalWidth - frameMargin * 2 - 10, totalHeight - frameMargin * 2 - 10);
+          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, frameRadius);
+          ctx.stroke();
+          drawRoundedRect(ctx, frameMargin + 5, frameMargin + 5, totalWidth - frameMargin * 2 - 10, totalHeight - frameMargin * 2 - 10, Math.max(0, frameRadius - 5));
+          ctx.stroke();
           break;
         case "dashed":
           ctx.setLineDash([8, 4]);
-          ctx.strokeRect(frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2);
+          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, frameRadius);
+          ctx.stroke();
           ctx.setLineDash([]);
           break;
         case "shadow":
           ctx.fillStyle = accentColor;
-          ctx.fillRect(frameMargin + 6, frameMargin + 6, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2);
+          drawRoundedRect(ctx, frameMargin + shadowDepth, frameMargin + shadowDepth, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, shadowRounded ? frameRadius : 0);
+          ctx.fill();
           ctx.fillStyle = bgColor;
-          ctx.fillRect(frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2);
-          ctx.strokeRect(frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2);
+          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, shadowRounded ? frameRadius : 0);
+          ctx.fill();
+          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, shadowRounded ? frameRadius : 0);
+          ctx.stroke();
           break;
         case "corners":
           const cl = 20;
@@ -648,7 +887,9 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
     // Center content (icon or custom text)
     if (hasCenterContent) {
       const isCustomText = centerIcon === "custom";
-      const fontSize = isCustomText ? Math.min(size / 6, (size / 4) / Math.max(1, centerContent.length / 3)) : size / 5;
+      const fontSize = isCustomText
+        ? Math.max(8, Math.min(size / 6, (size / 4) / Math.max(1, centerContent.length / 3)) * centerTextSize)
+        : size / 5;
       ctx.font = isCustomText ? `bold ${fontSize}px sans-serif` : `${fontSize}px serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -661,7 +902,8 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
       
       drawCenterBackground(ctx, padding + size / 2, padding + size / 2, bgWidth, bgHeight, centerBgShape);
       
-      ctx.fillStyle = fgColor;
+      const centerContentColor = isCustomText ? centerTextColor : fgColor;
+      ctx.fillStyle = centerContentColor;
       ctx.fillText(centerContent, padding + size / 2, padding + size / 2 + 2);
     }
 
@@ -695,114 +937,189 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
     link.click();
   };
 
+  const saveTheme = async () => {
+    const name = themeName.trim();
+    if (!name) {
+      toast.error("Please enter a theme name.");
+      return;
+    }
+    setSavingTheme(true);
+    try {
+      const res = await fetch("/api/qr-themes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, settings: currentSettings })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data?.error || "Failed to save theme.");
+        return;
+      }
+      toast.success("Theme saved.");
+      setThemeName("");
+    } catch (error) {
+      console.error("Save theme error:", error);
+      toast.error("Failed to save theme.");
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
   if (!mounted) {
     return <div className="h-64 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />;
   }
 
   return (
     <div className="space-y-6">
-      {/* Theme Presets */}
-      <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
-        <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200 mb-3">
-          <Sparkles size={18} /> Quick Themes
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {THEMES.map((theme) => (
-            <button
-              key={theme.name}
-              onClick={() => applyTheme(theme)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTheme === theme.name
-                  ? "ring-2 ring-offset-2 ring-blue-500"
-                  : ""
-              }`}
-              style={{ 
-                backgroundColor: theme.bg, 
-                color: theme.fg,
-                border: `2px solid ${theme.accent}`
-              }}
-            >
-              {theme.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* QR Code Display */}
-      <div className="flex justify-center">
-        <div
-          ref={qrRef}
-          style={{ ...getFrameStyle(), ...getBackgroundStyle() }}
-          className="relative"
-        >
-          {/* Corner brackets decoration */}
-          {frameStyle === "corners" && (
-            <>
-              <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 rounded-tl-sm" style={{ borderColor: accentColor }} />
-              <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 rounded-tr-sm" style={{ borderColor: accentColor }} />
-              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 rounded-bl-sm" style={{ borderColor: accentColor }} />
-              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 rounded-br-sm" style={{ borderColor: accentColor }} />
-            </>
+      <div className="lg:grid lg:grid-cols-[360px_1fr] lg:gap-6 lg:items-start">
+        <div className="lg:sticky lg:top-24 h-fit space-y-4">
+          {(profileBlurb || profileAvatarUrl) && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">About</p>
+              <div className="flex gap-3 items-start">
+                {profileAvatarUrl && (
+                  <div className={`h-14 w-14 overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0 ${
+                    profileAvatarShape === "circle" ? "rounded-full" : profileAvatarShape === "rounded" ? "rounded-xl" : ""
+                  }`}>
+                    <img src={profileAvatarUrl} alt="Profile avatar" className="h-full w-full object-contain" />
+                  </div>
+                )}
+                {profileBlurb && (
+                  <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{profileBlurb}</p>
+                )}
+              </div>
+            </div>
           )}
-          
-          <div className="relative">
-            <canvas
-              ref={qrCanvasRef}
-              width={size}
-              height={size}
-            />
-            {/* Center content overlay (icon or custom text) */}
-            {hasCenterContent && (
-              <div 
-                className="absolute inset-0 flex items-center justify-center pointer-events-none"
-              >
-                <div 
-                  className="flex items-center justify-center font-bold"
-                  style={{ 
-                    backgroundColor: bgColor,
-                    minWidth: centerPreviewBgWidth,
-                    height: centerPreviewBgHeight,
-                    fontSize: centerPreviewFontSize,
-                    borderRadius: getCenterBgRadius(Math.max(centerPreviewBgWidth, centerPreviewBgHeight)),
-                    padding: `${centerPaddingV}px ${centerPaddingH}px`,
-                    color: fgColor,
+          {/* QR Code Display */}
+          <div className="flex justify-center">
+            <div
+              ref={qrRef}
+              style={{ ...getFrameStyle(), ...getBackgroundStyle() }}
+              className="relative"
+            >
+              {/* Corner brackets decoration */}
+              {frameStyle === "corners" && (
+                <>
+                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 rounded-tl-sm" style={{ borderColor: accentColor }} />
+                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 rounded-tr-sm" style={{ borderColor: accentColor }} />
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 rounded-bl-sm" style={{ borderColor: accentColor }} />
+                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 rounded-br-sm" style={{ borderColor: accentColor }} />
+                </>
+              )}
+              
+              <div className="relative">
+                <canvas
+                  ref={qrCanvasRef}
+                  width={size}
+                  height={size}
+                />
+                {/* Center content overlay (icon or custom text) */}
+                {hasCenterContent && (
+                  <div 
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  >
+                    <div 
+                      className="flex items-center justify-center font-bold"
+                      style={{ 
+                        backgroundColor: bgColor,
+                        minWidth: centerPreviewBgWidth,
+                        height: centerPreviewBgHeight,
+                        fontSize: centerPreviewFontSize,
+                        borderRadius: getCenterBgRadius(Math.max(centerPreviewBgWidth, centerPreviewBgHeight)),
+                        padding: `${centerPaddingV}px ${centerPaddingH}px`,
+                    color: centerIcon === "custom" ? centerTextColor : fgColor,
                   }}
                 >
                   {centerContent}
                 </div>
+                  </div>
+                )}
+              </div>
+              
+              {includeLabel && (
+                <p
+                  className="text-center mt-3 font-bold"
+                  style={{ color: fgColor, fontSize: Math.max(14, size / 14) }}
+                >
+                  {deviceName}
+                </p>
+              )}
+              {overlayText && (
+                <p
+                  className="text-center mt-1 font-medium"
+                  style={{ color: accentColor, fontSize: Math.max(12, size / 18) }}
+                >
+                  {overlayText}
+                </p>
+              )}
+              {secondaryText && (
+                <p
+                  className="text-center mt-1"
+                  style={{ color: fgColor, fontSize: Math.max(10, size / 20), opacity: 0.8 }}
+                >
+                  {secondaryText}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Download Button */}
+          <button
+            onClick={downloadImage}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-medium"
+          >
+            <Download size={18} /> Download PNG
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Theme Presets */}
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
+            <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200 mb-3">
+              <Sparkles size={18} /> Quick Themes
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {THEMES.map((theme) => (
+                <button
+                  key={theme.name}
+                  onClick={() => applyTheme(theme)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    activeTheme === theme.name
+                      ? "ring-2 ring-offset-2 ring-blue-500"
+                      : ""
+                  }`}
+                  style={{ 
+                    backgroundColor: theme.bg, 
+                    color: theme.fg,
+                    border: `2px solid ${theme.accent}`
+                  }}
+                >
+                  {theme.name}
+                </button>
+              ))}
+            </div>
+            {customThemes.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide mb-2">Custom Themes</p>
+                <div className="flex flex-wrap gap-2">
+                  {customThemes.map((theme) => (
+                    <button
+                      key={theme.id}
+                      onClick={() => applyThemeSettings(theme.settings, theme.name)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        activeTheme === theme.name ? "ring-2 ring-offset-2 ring-blue-500" : ""
+                      }`}
+                    >
+                      {theme.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-          
-          {includeLabel && (
-            <p
-              className="text-center mt-3 font-bold"
-              style={{ color: fgColor, fontSize: Math.max(14, size / 14) }}
-            >
-              {deviceName}
-            </p>
-          )}
-          {overlayText && (
-            <p
-              className="text-center mt-1 font-medium"
-              style={{ color: accentColor, fontSize: Math.max(12, size / 18) }}
-            >
-              {overlayText}
-            </p>
-          )}
-          {secondaryText && (
-            <p
-              className="text-center mt-1"
-              style={{ color: fgColor, fontSize: Math.max(10, size / 20), opacity: 0.8 }}
-            >
-              {secondaryText}
-            </p>
-          )}
-        </div>
-      </div>
 
-      {/* Customization Options */}
-      <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 space-y-4">
+          {/* Customization Options */}
+          <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200">
           <Settings size={18} /> Customization
         </h3>
@@ -983,6 +1300,34 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
           </div>
         </div>
 
+        {frameStyle === "shadow" && (
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+              Shadow Depth
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="24"
+                value={shadowDepth}
+                onChange={(e) => setShadowDepth(Number(e.target.value))}
+                className="flex-1 accent-orange-500"
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-8">{shadowDepth}px</span>
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={shadowRounded}
+                onChange={(e) => setShadowRounded(e.target.checked)}
+                className="rounded accent-orange-500"
+              />
+              Rounded Corners
+            </label>
+          </div>
+        )}
+
         {/* Custom center text input */}
         {centerIcon === "custom" && (
           <div>
@@ -998,6 +1343,49 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white placeholder-gray-400"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Max 12 characters. Short text works best.</p>
+            <div className="mt-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+                Center Text Size
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0.6"
+                  max="1.6"
+                  step="0.05"
+                  value={centerTextSize}
+                  onChange={(e) => setCenterTextSize(Number(e.target.value))}
+                  className="flex-1 accent-orange-500"
+                />
+                <span className="text-xs text-gray-500 dark:text-gray-400 w-10">{centerTextSize.toFixed(2)}x</span>
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+                Center Text Color
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={centerTextColor}
+                  onChange={(e) => {
+                    setCenterTextColor(e.target.value);
+                    setCenterTextColorLocked(false);
+                  }}
+                  className="w-12 h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCenterTextColor(accentColor);
+                    setCenterTextColorLocked(true);
+                  }}
+                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Use Accent
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1085,6 +1473,35 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
           )}
         </div>
 
+        {/* Export background */}
+        <div>
+          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Export Background</label>
+          <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="export-bg"
+                value="white"
+                checked={exportBackground === "white"}
+                onChange={() => setExportBackground("white")}
+                className="accent-orange-500"
+              />
+              White
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="export-bg"
+                value="transparent"
+                checked={exportBackground === "transparent"}
+                onChange={() => setExportBackground("transparent")}
+                className="accent-orange-500"
+              />
+              Transparent
+            </label>
+          </div>
+        </div>
+
         {/* Text Inputs */}
         <div className="space-y-3">
           <div>
@@ -1125,13 +1542,30 @@ export function QRCodeGenerator({ url, deviceName }: QRCodeGeneratorProps) {
         </label>
       </div>
 
-      {/* Download Button */}
-      <button
-        onClick={downloadImage}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-medium"
-      >
-        <Download size={18} /> Download PNG
-      </button>
+      {showThemeSave && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Save as Custom Theme</h3>
+          <div className="flex flex-col md:flex-row gap-3">
+            <input
+              type="text"
+              value={themeName}
+              onChange={(e) => setThemeName(e.target.value)}
+              placeholder="Theme name"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+            <button
+              type="button"
+              onClick={saveTheme}
+              disabled={savingTheme}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+            >
+              {savingTheme ? "Saving..." : "Save Theme"}
+            </button>
+          </div>
+        </div>
+      )}
+        </div>
+      </div>
     </div>
   );
 }

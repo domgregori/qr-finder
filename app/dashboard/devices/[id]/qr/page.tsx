@@ -1,16 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { MapPin, ArrowLeft, ExternalLink, Copy, Check, Globe } from "lucide-react";
-import { QRCodeGenerator } from "@/components/qr-code-generator";
+import { QRCodeGenerator, QrSettings } from "@/components/qr-code-generator";
 
 interface Device {
   id: string;
   name: string;
   uniqueCode: string;
+  qrSettings?: QrSettings | null;
+}
+
+interface AccountInfo {
+  bio?: string | null;
+  avatarDisplayUrl?: string | null;
+  avatarShape?: "circle" | "rounded" | "square" | null;
 }
 
 export default function DeviceQRPage() {
@@ -24,6 +31,8 @@ export default function DeviceQRPage() {
   const [copied, setCopied] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [publicPortalUrl, setPublicPortalUrl] = useState<string | null>(null);
+  const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -43,6 +52,7 @@ export default function DeviceQRPage() {
       if (id) {
         fetchDevice();
       }
+      fetchAccount();
     }
   }, [status, id]);
 
@@ -73,6 +83,36 @@ export default function DeviceQRPage() {
       setLoading(false);
     }
   };
+
+  const fetchAccount = async () => {
+    try {
+      const res = await fetch("/api/account");
+      if (res.ok) {
+        const data = await res.json();
+        setAccountInfo(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch account:", error);
+    }
+  };
+
+  const handleSettingsChange = useCallback((settings: QrSettings) => {
+    if (!id) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/devices/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ qrSettings: settings })
+        });
+      } catch (error) {
+        console.error("Failed to save QR settings:", error);
+      }
+    }, 600);
+  }, [id]);
 
   // Use PUBLIC_PORTAL_URL if set, otherwise fall back to current origin
   const effectiveBaseUrl = publicPortalUrl || baseUrl;
@@ -173,6 +213,11 @@ export default function DeviceQRPage() {
             <QRCodeGenerator
               url={deviceUrl}
               deviceName={device?.name ?? "Device"}
+              initialSettings={device?.qrSettings ?? null}
+              onSettingsChange={handleSettingsChange}
+              profileBlurb={accountInfo?.bio ?? null}
+              profileAvatarUrl={accountInfo?.avatarDisplayUrl ?? null}
+              profileAvatarShape={accountInfo?.avatarShape ?? null}
             />
           )}
         </div>
