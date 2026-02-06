@@ -971,9 +971,9 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
 
   return (
     <div className="space-y-6">
-      <div className="sticky top-24 z-10 space-y-4">
-          {(profileBlurb || profileAvatarUrl) && (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <div className="sticky top-24 z-10 space-y-4 rounded-2xl bg-gray-900/20 dark:bg-black/50 ring-1 ring-gray-200/70 dark:ring-gray-700/70 p-4 shadow-lg">
+        {(profileBlurb || profileAvatarUrl) && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">About</p>
               <div className="flex gap-3 items-start">
                 {profileAvatarUrl && (
