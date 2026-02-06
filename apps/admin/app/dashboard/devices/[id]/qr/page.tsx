@@ -14,12 +14,6 @@ interface Device {
   qrSettings?: QrSettings | null;
 }
 
-interface AccountInfo {
-  bio?: string | null;
-  avatarDisplayUrl?: string | null;
-  avatarShape?: "circle" | "rounded" | "square" | null;
-}
-
 export default function DeviceQRPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
@@ -31,7 +25,6 @@ export default function DeviceQRPage() {
   const [copied, setCopied] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [publicPortalUrl, setPublicPortalUrl] = useState<string | null>(null);
-  const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -52,7 +45,6 @@ export default function DeviceQRPage() {
       if (id) {
         fetchDevice();
       }
-      fetchAccount();
     }
   }, [status, id]);
 
@@ -84,17 +76,6 @@ export default function DeviceQRPage() {
     }
   };
 
-  const fetchAccount = async () => {
-    try {
-      const res = await fetch("/api/account");
-      if (res.ok) {
-        const data = await res.json();
-        setAccountInfo(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch account:", error);
-    }
-  };
 
   const handleSettingsChange = useCallback((settings: QrSettings) => {
     if (!id) return;
@@ -215,9 +196,6 @@ export default function DeviceQRPage() {
               deviceName={device?.name ?? "Device"}
               initialSettings={device?.qrSettings ?? null}
               onSettingsChange={handleSettingsChange}
-              profileBlurb={accountInfo?.bio ?? null}
-              profileAvatarUrl={accountInfo?.avatarDisplayUrl ?? null}
-              profileAvatarShape={accountInfo?.avatarShape ?? null}
             />
           )}
         </div>
