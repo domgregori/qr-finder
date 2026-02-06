@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       name: user?.name ?? null,
       bio: user?.bio ?? null,
       avatarDisplayUrl,
+      avatarPath: user?.avatarUrl ?? null,
       avatarShape: user?.avatarShape ?? null
     });
   } catch (error) {

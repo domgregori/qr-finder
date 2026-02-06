@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@shared/lib/db";
 import { getFileUrl } from "@shared/lib/storage";
 import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitResponse } from "@shared/lib/rate-limit";
@@ -6,7 +6,7 @@ import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitResponse } from "@sh
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { code: string } }
 ) {
   // Rate limit check
@@ -59,7 +59,7 @@ export async function GET(
           if (res.ok) {
             const data = await res.json();
             profileBlurb = data?.bio ?? null;
-            profileAvatarUrl = data?.avatarDisplayUrl ?? null;
+          profileAvatarUrl = data?.avatarPath ? "/api/public/profile-image" : (data?.avatarDisplayUrl ?? null);
             profileAvatarShape = data?.avatarShape ?? null;
           }
         }
@@ -68,29 +68,34 @@ export async function GET(
       }
     }
 
+    const scanCookieName = `qr_scan_${device.id}`;
+    const hasScanCookie = req.cookies.get(scanCookieName)?.value === "1";
+
     // Notify admin app to send Apprise notifications (keeps endpoints private)
-    const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
-    const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
-    if (internalSecret) {
-      try {
-        await fetch(`${adminNotifyUrl}/api/internal/notify`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-internal-secret": internalSecret
-          },
-          body: JSON.stringify({
-            type: "scan",
-            deviceId: device.id,
-            deviceName: device.name
-          })
-        });
-      } catch (e) {
-        console.error("Failed to notify admin app:", e);
+    if (!hasScanCookie) {
+      const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
+      const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
+      if (internalSecret) {
+        try {
+          await fetch(`${adminNotifyUrl}/api/internal/notify`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-secret": internalSecret
+            },
+            body: JSON.stringify({
+              type: "scan",
+              deviceId: device.id,
+              deviceName: device.name
+            })
+          });
+        } catch (e) {
+          console.error("Failed to notify admin app:", e);
+        }
       }
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       id: device.id,
       name: device.name,
       description: device.description,
@@ -102,6 +107,14 @@ export async function GET(
       profileAvatarUrl,
       profileAvatarShape
     });
+    if (!hasScanCookie) {
+      response.cookies.set(scanCookieName, "1", {
+        path: "/",
+        httpOnly: false,
+        sameSite: "lax"
+      });
+    }
+    return response;
   } catch (error) {
     console.error("Get public device error:", error);
     return NextResponse.json(
