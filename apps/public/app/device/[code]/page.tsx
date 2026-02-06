@@ -231,28 +231,24 @@ export default function PublicDevicePage() {
         {(device?.includeBio && (device?.profileBlurb || device?.profileAvatarUrl)) && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">About the owner</p>
-            <div className="flex items-start gap-4">
+            <div className="flex flex-col md:flex-row md:items-start gap-5">
               {device?.profileAvatarUrl && (
-                <div
-                  className={`w-16 h-16 overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0 ${
-                    device?.profileAvatarShape === "circle"
-                      ? "rounded-full"
-                      : device?.profileAvatarShape === "rounded"
-                      ? "rounded-2xl"
-                      : "rounded-lg"
-                  }`}
-                >
-                  <img
-                    src={device.profileAvatarUrl}
-                    alt="Owner avatar"
-                    className="h-full w-full object-contain"
-                  />
+                <div className="md:w-3/5 w-full">
+                  <div className="w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
+                    <img
+                      src={device.profileAvatarUrl}
+                      alt="Owner artwork"
+                      className="w-full h-auto object-contain"
+                    />
+                  </div>
                 </div>
               )}
               {device?.profileBlurb && (
-                <p className="text-gray-700 dark:text-gray-200 text-sm whitespace-pre-wrap">
-                  {device.profileBlurb}
-                </p>
+                <div className="md:w-2/5 w-full">
+                  <p className="text-gray-700 dark:text-gray-200 text-sm whitespace-pre-wrap">
+                    {device.profileBlurb}
+                  </p>
+                </div>
               )}
             </div>
           </div>
