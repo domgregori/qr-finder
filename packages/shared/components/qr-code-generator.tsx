@@ -971,53 +971,7 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
 
   return (
     <div className="space-y-6">
-      {/* Theme Presets */}
-      <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
-        <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200 mb-3">
-          <Sparkles size={18} /> Quick Themes
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {THEMES.map((theme) => (
-            <button
-              key={theme.name}
-              onClick={() => applyTheme(theme)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTheme === theme.name
-                  ? "ring-2 ring-offset-2 ring-blue-500"
-                  : ""
-              }`}
-              style={{ 
-                backgroundColor: theme.bg, 
-                color: theme.fg,
-                border: `2px solid ${theme.accent}`
-              }}
-            >
-              {theme.name}
-            </button>
-          ))}
-        </div>
-        {customThemes.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide mb-2">Custom Themes</p>
-            <div className="flex flex-wrap gap-2">
-              {customThemes.map((theme) => (
-                <button
-                  key={theme.id}
-                  onClick={() => applyThemeSettings(theme.settings, theme.name)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    activeTheme === theme.name ? "ring-2 ring-offset-2 ring-blue-500" : ""
-                  }`}
-                >
-                  {theme.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="md:grid md:grid-cols-[360px_1fr] md:gap-6 md:items-start">
-        <div className="md:sticky md:top-24 md:self-start h-fit space-y-4">
+      <div className="sticky top-24 z-10 space-y-4">
           {(profileBlurb || profileAvatarUrl) && (
             <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">About</p>
@@ -1117,7 +1071,52 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
           </button>
         </div>
 
-        <div className="space-y-6">
+      <div className="space-y-6">
+        {/* Theme Presets */}
+        <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
+          <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200 mb-3">
+            <Sparkles size={18} /> Quick Themes
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {THEMES.map((theme) => (
+              <button
+                key={theme.name}
+                onClick={() => applyTheme(theme)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  activeTheme === theme.name
+                    ? "ring-2 ring-offset-2 ring-blue-500"
+                    : ""
+                }`}
+                style={{ 
+                  backgroundColor: theme.bg, 
+                  color: theme.fg,
+                  border: `2px solid ${theme.accent}`
+                }}
+              >
+                {theme.name}
+              </button>
+            ))}
+          </div>
+          {customThemes.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide mb-2">Custom Themes</p>
+              <div className="flex flex-wrap gap-2">
+                {customThemes.map((theme) => (
+                  <button
+                    key={theme.id}
+                    onClick={() => applyThemeSettings(theme.settings, theme.name)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      activeTheme === theme.name ? "ring-2 ring-offset-2 ring-blue-500" : ""
+                    }`}
+                  >
+                    {theme.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
           {/* Customization Options */}
           <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 space-y-4">
         <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200">
@@ -1565,7 +1564,6 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
         </div>
       )}
         </div>
-      </div>
     </div>
   );
 }
