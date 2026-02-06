@@ -27,6 +27,7 @@ interface DeviceData {
   profileBlurb?: string | null;
   profileAvatarUrl?: string | null;
   profileAvatarShape?: "circle" | "rounded" | "square" | null;
+  includeBio?: boolean | null;
 }
 
 export default function PublicDevicePage() {
@@ -227,7 +228,7 @@ export default function PublicDevicePage() {
           </div>
         </div>
 
-        {(device?.profileBlurb || device?.profileAvatarUrl) && (
+        {(device?.includeBio && (device?.profileBlurb || device?.profileAvatarUrl)) && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">About the owner</p>
             <div className="flex items-start gap-4">

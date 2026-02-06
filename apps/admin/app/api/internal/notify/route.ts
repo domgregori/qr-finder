@@ -38,10 +38,18 @@ export async function POST(req: Request) {
       messageBody = `From: ${nickname}\n\n${message}`;
     }
 
-    // 1) Device-specific Apprise URL
+    const deviceUrls = Array.isArray(device.appriseUrls)
+      ? device.appriseUrls.filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+      : [];
+    const urlSet = new Set<string>(deviceUrls);
     if (device.appriseUrl) {
+      urlSet.add(device.appriseUrl);
+    }
+
+    // 1) Device-specific Apprise URLs
+    for (const url of urlSet) {
       try {
-        const result = await sendAppriseNotification(device.appriseUrl, title, messageBody);
+        const result = await sendAppriseNotification(url, title, messageBody);
         if (!result.ok) {
           console.error("Device Apprise notification failed:", result.error);
         }

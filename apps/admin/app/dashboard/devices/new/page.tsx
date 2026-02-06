@@ -22,11 +22,13 @@ export default function NewDevicePage() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [appriseUrl, setAppriseUrl] = useState("");
+  const [appriseUrls, setAppriseUrls] = useState<string[]>([]);
+  const [customAppriseUrl, setCustomAppriseUrl] = useState("");
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [appriseEndpoints, setAppriseEndpoints] = useState<AppriseEndpoint[]>([]);
   const [photoUrl, setPhotoUrl] = useState("");
   const [isPublicPhoto, setIsPublicPhoto] = useState(true);
+  const [includeBio, setIncludeBio] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -52,15 +54,24 @@ export default function NewDevicePage() {
     }
   };
 
+  const addAppriseUrl = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setAppriseUrls((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+  };
+
+  const removeAppriseUrl = (url: string) => {
+    setAppriseUrls((prev) => prev.filter((item) => item !== url));
+  };
+
   const handleEndpointChange = (value: string) => {
     setSelectedEndpoint(value);
-    if (value && value !== "custom") {
+    if (value) {
       const endpoint = appriseEndpoints.find(e => e.id === value);
-      setAppriseUrl(endpoint?.url || "");
-    } else if (value === "custom") {
-      setAppriseUrl("");
-    } else {
-      setAppriseUrl("");
+      if (endpoint?.url) {
+        addAppriseUrl(endpoint.url);
+      }
+      setSelectedEndpoint("");
     }
   };
 
@@ -147,7 +158,8 @@ export default function NewDevicePage() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || null,
-          appriseUrl: appriseUrl.trim() || null,
+          appriseUrls,
+          includeBio,
           photoUrl: photoUrl || null,
           isPublicPhoto
         })
@@ -293,30 +305,60 @@ export default function NewDevicePage() {
             {/* Apprise Notification */}
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <Bell size={16} /> Notification Endpoint
+                <Bell size={16} /> Notification Endpoints
               </label>
               <select
                 value={selectedEndpoint}
                 onChange={(e) => handleEndpointChange(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
-                <option value="">None (no notifications)</option>
+                <option value="">Add from saved endpoints...</option>
                 {appriseEndpoints.map((endpoint) => (
                   <option key={endpoint.id} value={endpoint.id}>
                     {endpoint.name}
                   </option>
                 ))}
-                <option value="custom">Custom URL...</option>
               </select>
-              
-              {selectedEndpoint === "custom" && (
+
+              <div className="mt-3 flex gap-2">
                 <input
                   type="text"
-                  value={appriseUrl}
-                  onChange={(e) => setAppriseUrl(e.target.value)}
-                  placeholder="e.g., ntfy://my-topic or tgram://bot:token/chatid"
-                  className="w-full mt-2 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                  value={customAppriseUrl}
+                  onChange={(e) => setCustomAppriseUrl(e.target.value)}
+                  placeholder="Add custom URL (e.g., ntfy://my-topic)"
+                  className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    addAppriseUrl(customAppriseUrl);
+                    setCustomAppriseUrl("");
+                  }}
+                  className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  Add
+                </button>
+              </div>
+
+              {appriseUrls.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {appriseUrls.map((url) => (
+                    <span
+                      key={url}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-xs rounded-full"
+                    >
+                      <span className="font-mono truncate max-w-[220px]">{url}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeAppriseUrl(url)}
+                        className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-white"
+                        title="Remove"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
               )}
               
               <div className="flex items-center justify-between mt-2">
@@ -330,6 +372,20 @@ export default function NewDevicePage() {
                   <Plus size={12} /> Manage endpoints
                 </Link>
               </div>
+            </div>
+
+            {/* Public Profile */}
+            <div className="flex items-center gap-3">
+              <input
+                id="include-bio"
+                type="checkbox"
+                checked={includeBio}
+                onChange={(e) => setIncludeBio(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="include-bio" className="text-sm text-gray-700 dark:text-gray-300">
+                Show my bio on the public device page
+              </label>
             </div>
 
             {/* Submit */}

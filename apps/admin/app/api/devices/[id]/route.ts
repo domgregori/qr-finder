@@ -55,6 +55,8 @@ export async function PUT(
       name: rawName,
       description: rawDescription,
       appriseUrl: rawAppriseUrl,
+      appriseUrls: rawAppriseUrls,
+      includeBio,
       photoUrl,
       isPublicPhoto,
       qrSettings
@@ -64,13 +66,22 @@ export async function PUT(
     const name = rawName ? sanitizeDeviceName(rawName) : undefined;
     const description = rawDescription !== undefined ? (rawDescription ? sanitizeDescription(rawDescription) : null) : undefined;
     const appriseUrl = rawAppriseUrl !== undefined ? (rawAppriseUrl ? sanitizeUrl(rawAppriseUrl) : null) : undefined;
+    const appriseUrls = rawAppriseUrls !== undefined
+      ? Array.isArray(rawAppriseUrls)
+        ? rawAppriseUrls
+            .map((url) => (url ? sanitizeUrl(url) : null))
+            .filter((url): url is string => Boolean(url))
+        : []
+      : undefined;
 
     const device = await prisma.device.update({
       where: { id: params?.id ?? "" },
       data: {
         name,
         description,
-        appriseUrl,
+        appriseUrl: appriseUrls ? (appriseUrls[0] ?? null) : appriseUrl,
+        appriseUrls,
+        includeBio: includeBio !== undefined ? includeBio : undefined,
         photoUrl: photoUrl ?? undefined,
         isPublicPhoto: isPublicPhoto ?? undefined,
         qrSettings: qrSettings !== undefined ? qrSettings : undefined

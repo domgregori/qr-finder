@@ -44,12 +44,27 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name: rawName, description: rawDescription, appriseUrl: rawAppriseUrl, photoUrl, isPublicPhoto } = body ?? {};
+    const {
+      name: rawName,
+      description: rawDescription,
+      appriseUrl: rawAppriseUrl,
+      appriseUrls: rawAppriseUrls,
+      includeBio,
+      photoUrl,
+      isPublicPhoto
+    } = body ?? {};
 
     // Sanitize inputs
     const name = sanitizeDeviceName(rawName);
     const description = rawDescription ? sanitizeDescription(rawDescription) : null;
     const appriseUrl = rawAppriseUrl ? sanitizeUrl(rawAppriseUrl) : null;
+    const appriseUrls = Array.isArray(rawAppriseUrls)
+      ? rawAppriseUrls
+          .map((url) => (url ? sanitizeUrl(url) : null))
+          .filter((url): url is string => Boolean(url))
+      : appriseUrl
+        ? [appriseUrl]
+        : [];
 
     if (!name) {
       return NextResponse.json(
@@ -64,7 +79,9 @@ export async function POST(req: Request) {
       data: {
         name,
         description,
-        appriseUrl,
+        appriseUrl: appriseUrls[0] ?? appriseUrl ?? null,
+        appriseUrls,
+        includeBio: typeof includeBio === "boolean" ? includeBio : true,
         photoUrl: photoUrl ?? null,
         isPublicPhoto: isPublicPhoto ?? false,
         uniqueCode

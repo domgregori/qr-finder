@@ -27,6 +27,8 @@ model Device {
   photoUrl    String?
   isPublicPhoto Boolean @default(false)
   appriseUrl  String?
+  appriseUrls Json?
+  includeBio  Boolean   @default(true)
   uniqueCode  String    @unique
   qrSettings  Json?
   createdAt   DateTime  @default(now())
