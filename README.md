@@ -129,43 +129,18 @@ Public portal (if running locally): <http://localhost:3001>
          │
          ▼
 ┌─────────────────┐
-│  Local Storage  │  (or S3-compatible)
+│  Local Storage  │
 │   ./uploads/    │
 └─────────────────┘
 ```
 
-### Storage Options
-
-#### Option 1: Local Storage (Default)
+### Storage
 
 Files are stored in the `./uploads` directory. This is the simplest option and works out of the box.
 
 ```bash
 # In .env
 STORAGE_TYPE=local
-```
-
-#### Option 2: AWS S3
-
-```bash
-# In .env
-STORAGE_TYPE=s3
-AWS_BUCKET_NAME=your-bucket
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-```
-
-#### Option 3: S3-Compatible (MinIO, Backblaze B2, etc.)
-
-```bash
-# In .env
-STORAGE_TYPE=s3
-AWS_BUCKET_NAME=your-bucket
-AWS_ENDPOINT=http://minio:9000
-AWS_FORCE_PATH_STYLE=true
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
 ```
 
 ### Database Options
@@ -404,12 +379,7 @@ yarn dev
 | `POSTGRES_PASSWORD`              | Docker    | `changeme`  | PostgreSQL password (docker-compose) |
 | `NEXTAUTH_URL`                   | Yes       | -           | Your app's public URL                |
 | `NEXTAUTH_SECRET`                | Yes       | -           | Session encryption secret            |
-| `STORAGE_TYPE`                   | No        | `local`     | `local` or `s3`                      |
-| `AWS_BUCKET_NAME`                | S3 only   | -           | S3 bucket name                       |
-| `AWS_REGION`                     | S3 only   | `us-east-1` | AWS region                           |
-| `AWS_ACCESS_KEY_ID`              | S3 only   | -           | AWS access key                       |
-| `AWS_SECRET_ACCESS_KEY`          | S3 only   | -           | AWS secret key                       |
-| `AWS_ENDPOINT`                   | S3-compat | -           | Custom S3 endpoint (MinIO, etc.)     |
+| `STORAGE_TYPE`                   | No        | `local`     | Local file storage                   |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No        | -           | Cloudflare Turnstile site key        |
 | `TURNSTILE_SECRET_KEY`           | No        | -           | Cloudflare Turnstile secret          |
 
@@ -461,7 +431,7 @@ docker compose exec admin npx prisma db push
 - **Auth**: NextAuth.js (credentials provider)
 - **Styling**: Tailwind CSS + shadcn/ui
 - **QR Generation**: qrcode library
-- **File Storage**: Local filesystem or AWS S3
+- **File Storage**: Local filesystem
 - **Captcha**: Cloudflare Turnstile (optional)
 - **Notifications**: Apprise-compatible URLs
 
