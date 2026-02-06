@@ -47,10 +47,77 @@ export default function PublicDevicePage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState("");
+  const [language, setLanguage] = useState<"en" | "es">("en");
 
   const turnstileSiteKey = typeof window !== "undefined" 
     ? (window as any).__TURNSTILE_SITE_KEY ?? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""
     : "";
+
+  const copyByLang = {
+    en: {
+      header: "Lost & Found",
+      loading: "Loading device information...",
+      deviceNotFound: "Device Not Found",
+      deviceNotFoundBody:
+        "This QR code doesn't match any registered device. The device may have been removed or the code is invalid.",
+      errorTitle: "Something went wrong",
+      messageBoard: "Message Board",
+      messageBoardHelp: "Leave a message to help return this item to its owner",
+      noMessages: "No messages yet. Be the first to leave a message!",
+      owner: "Owner",
+      ownerLabel: "You (Owner)",
+      yourName: "Your Name",
+      yourNamePlaceholder: "Enter your name",
+      messageLabel: "Message",
+      messagePlaceholder: "Let the owner know you found their item...",
+      send: "Send Message",
+      sending: "Sending...",
+      messageSent: "Message sent successfully!",
+      formError: "Please enter your name and message",
+      aboutOwner: "About the owner",
+      privacy:
+        "Your message and name will be visible to the device owner. Do not share sensitive personal information."
+    },
+    es: {
+      header: "Objetos Perdidos",
+      loading: "Cargando información del dispositivo...",
+      deviceNotFound: "Dispositivo No Encontrado",
+      deviceNotFoundBody:
+        "Este código QR no coincide con ningún dispositivo registrado. Es posible que el dispositivo haya sido eliminado o el código no sea válido.",
+      errorTitle: "Algo salió mal",
+      messageBoard: "Mensajes",
+      messageBoardHelp: "Deja un mensaje para ayudar a devolver este objeto a su dueño",
+      noMessages: "Aún no hay mensajes. ¡Sé el primero en dejar uno!",
+      owner: "Propietario",
+      ownerLabel: "Tú (Propietario)",
+      yourName: "Tu Nombre",
+      yourNamePlaceholder: "Escribe tu nombre",
+      messageLabel: "Mensaje",
+      messagePlaceholder: "Avísale al dueño que encontraste su objeto...",
+      send: "Enviar Mensaje",
+      sending: "Enviando...",
+      messageSent: "¡Mensaje enviado!",
+      formError: "Por favor ingresa tu nombre y mensaje",
+      aboutOwner: "Sobre el propietario",
+      privacy:
+        "Tu mensaje y nombre serán visibles para el dueño del dispositivo. No compartas información personal sensible."
+    }
+  } as const;
+
+  const t = copyByLang[language];
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("public_lang");
+    if (stored === "en" || stored === "es") {
+      setLanguage(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("public_lang", language);
+  }, [language]);
 
   useEffect(() => {
     if (code) {
@@ -106,7 +173,7 @@ export default function PublicDevicePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nickname.trim() || !message.trim()) {
-      setFormError("Please enter your name and message");
+      setFormError(t.formError);
       return;
     }
 
@@ -164,7 +231,7 @@ export default function PublicDevicePage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50 dark:from-gray-900 dark:to-gray-800">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Loading device information...</p>
+          <p className="text-gray-600 dark:text-gray-400">{t.loading}</p>
         </div>
       </div>
     );
@@ -177,11 +244,8 @@ export default function PublicDevicePage() {
           <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertTriangle size={32} className="text-red-600 dark:text-red-400" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Device Not Found</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            This QR code doesn&apos;t match any registered device.
-            The device may have been removed or the code is invalid.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t.deviceNotFound}</h1>
+          <p className="text-gray-600 dark:text-gray-400">{t.deviceNotFoundBody}</p>
         </div>
       </div>
     );
@@ -194,7 +258,7 @@ export default function PublicDevicePage() {
           <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle size={32} className="text-red-600 dark:text-red-400" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Something went wrong</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t.errorTitle}</h1>
           <p className="text-gray-600 dark:text-gray-400">{error}</p>
         </div>
       </div>
@@ -206,89 +270,50 @@ export default function PublicDevicePage() {
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-2xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-2">
-            <MapPin size={24} className="text-orange-500" />
-            <span className="font-bold text-gray-900 dark:text-white">Lost & Found</span>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <MapPin size={24} className="text-orange-500" />
+              <span className="font-bold text-gray-900 dark:text-white">{t.header}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLanguage("en")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                  language === "en"
+                    ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900"
+                    : "border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300"
+                }`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage("es")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                  language === "es"
+                    ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900"
+                    : "border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300"
+                }`}
+              >
+                ES
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <main className="max-w-2xl mx-auto px-6 py-8">
-        {/* Notification Banner */}
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-3">
-            <CheckCircle size={20} className="text-green-600 dark:text-green-400 flex-shrink-0" />
-            <p className="text-green-800 dark:text-green-200 text-sm">
-              <strong>Leave a message to help return this item!</strong>
-              <br />
-              <br />
-              The owner will get notifications.
-            </p>
-          </div>
-        </div>
-
-        {(device?.includeBio && (device?.profileBlurb || device?.profileAvatarUrl)) && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
-            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">About the owner</p>
-            <div className="flex flex-col md:flex-row md:items-start gap-5">
-              {device?.profileAvatarUrl && (
-                <div className="md:w-3/5 w-full">
-                  <div className="w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
-                    <img
-                      src={device.profileAvatarUrl}
-                      alt="Owner artwork"
-                      className="w-full h-auto object-contain"
-                    />
-                  </div>
-                </div>
-              )}
-              {device?.profileBlurb && (
-                <div className="md:w-2/5 w-full">
-                  <p className="text-gray-700 dark:text-gray-200 text-sm whitespace-pre-wrap">
-                    {device.profileBlurb}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Device Info */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
-          <div className="flex items-start gap-4">
-            {device?.photoUrl ? (
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
-                <Image
-                  src={device.photoUrl}
-                  alt={device?.name ?? "Device"}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            ) : (
-              <div className="w-20 h-20 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                <Smartphone size={32} className="text-blue-600 dark:text-blue-400" />
-              </div>
-            )}
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{device?.name ?? ""}</h1>
-              {device?.description && (
-                <p className="text-gray-600 dark:text-gray-400 text-sm">{device.description}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Message Board */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <MessageCircle size={18} />
-              Message Board
+              {t.messageBoard}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Leave a message to help return this item to its owner
+              {t.messageBoardHelp}
             </p>
           </div>
 
@@ -297,7 +322,7 @@ export default function PublicDevicePage() {
             {(device?.messages?.length ?? 0) === 0 ? (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 <MessageCircle size={24} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No messages yet. Be the first to leave a message!</p>
+                <p className="text-sm">{t.noMessages}</p>
               </div>
             ) : (
               (device?.messages ?? []).map((msg) => (
@@ -317,7 +342,7 @@ export default function PublicDevicePage() {
                       <span className={`text-xs font-medium ${
                         msg?.isOwnerReply ? "text-blue-100" : "text-gray-600 dark:text-gray-400"
                       }`}>
-                        {msg?.isOwnerReply ? "Owner" : msg?.nickname ?? ""}
+                        {msg?.isOwnerReply ? t.owner : msg?.nickname ?? ""}
                       </span>
                     </div>
                     <p className="text-sm">{msg?.message ?? ""}</p>
@@ -346,28 +371,28 @@ export default function PublicDevicePage() {
             {sent && (
               <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm rounded-lg">
                 <CheckCircle size={14} />
-                Message sent successfully!
+                {t.messageSent}
               </div>
             )}
 
             <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">Your Name</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{t.yourName}</label>
               <input
                 type="text"
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
-                placeholder="Enter your name"
+                placeholder={t.yourNamePlaceholder}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                 required
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">Message</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{t.messageLabel}</label>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Let the owner know you found their item..."
+                placeholder={t.messagePlaceholder}
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                 required
@@ -388,20 +413,74 @@ export default function PublicDevicePage() {
               className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
             >
               {sending ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                  <span>{t.sending}</span>
+                </div>
               ) : (
                 <>
-                  <Send size={18} /> Send Message
+                  <Send size={18} /> {t.send}
                 </>
               )}
             </button>
           </form>
         </div>
 
+        {/* Device Info */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mt-6">
+          <div className="flex items-start gap-4">
+            {device?.photoUrl ? (
+              <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
+                <Image
+                  src={device.photoUrl}
+                  alt={device?.name ?? "Device"}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-20 h-20 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <Smartphone size={32} className="text-blue-600 dark:text-blue-400" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{device?.name ?? ""}</h1>
+              {device?.description && (
+                <p className="text-gray-600 dark:text-gray-400 text-sm">{device.description}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {(device?.includeBio && (device?.profileBlurb || device?.profileAvatarUrl)) && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mt-6">
+            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">{t.aboutOwner}</p>
+            <div className="flex flex-col md:flex-row md:items-start gap-5">
+              {device?.profileAvatarUrl && (
+                <div className="md:w-3/5 w-full">
+                  <div className="w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
+                    <img
+                      src={device.profileAvatarUrl}
+                      alt="Owner artwork"
+                      className="w-full h-auto object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+              {device?.profileBlurb && (
+                <div className="md:w-2/5 w-full">
+                  <p className="text-gray-700 dark:text-gray-200 text-base md:text-lg font-serif leading-relaxed whitespace-pre-wrap">
+                    {device.profileBlurb}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Privacy Note */}
         <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-6">
-          Your message and name will be visible to the device owner.
-          Do not share sensitive personal information.
+          {t.privacy}
         </p>
       </main>
     </div>
