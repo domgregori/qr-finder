@@ -24,6 +24,9 @@ interface DeviceData {
   photoUrl: string | null;
   uniqueCode: string;
   messages: Message[];
+  profileBlurb?: string | null;
+  profileAvatarUrl?: string | null;
+  profileAvatarShape?: "circle" | "rounded" | "square" | null;
 }
 
 export default function PublicDevicePage() {
@@ -216,13 +219,43 @@ export default function PublicDevicePage() {
           <div className="flex items-center gap-3">
             <CheckCircle size={20} className="text-green-600 dark:text-green-400 flex-shrink-0" />
             <p className="text-green-800 dark:text-green-200 text-sm">
-              <strong>Leave a message!</strong> to help return this item!
+              <strong>Leave a message to help return this item!</strong>
               <br />
               <br />
-              <strong>The owner was notified</strong> that you scanned the qr code, and will receive notifications for messages sent.
+              The owner will get notifications.
             </p>
           </div>
         </div>
+
+        {(device?.profileBlurb || device?.profileAvatarUrl) && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
+            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">About the owner</p>
+            <div className="flex items-start gap-4">
+              {device?.profileAvatarUrl && (
+                <div
+                  className={`w-16 h-16 overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0 ${
+                    device?.profileAvatarShape === "circle"
+                      ? "rounded-full"
+                      : device?.profileAvatarShape === "rounded"
+                      ? "rounded-2xl"
+                      : "rounded-lg"
+                  }`}
+                >
+                  <img
+                    src={device.profileAvatarUrl}
+                    alt="Owner avatar"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              )}
+              {device?.profileBlurb && (
+                <p className="text-gray-700 dark:text-gray-200 text-sm whitespace-pre-wrap">
+                  {device.profileBlurb}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Device Info */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">

@@ -41,6 +41,31 @@ export async function GET(
       }
     }
 
+    // Load public profile info via admin app (keeps user table private)
+    let profileBlurb: string | null = null;
+    let profileAvatarUrl: string | null = null;
+    let profileAvatarShape: string | null = null;
+    try {
+      const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
+      const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
+      if (internalSecret) {
+        const res = await fetch(`${adminNotifyUrl}/api/internal/profile`, {
+          method: "GET",
+          headers: {
+            "x-internal-secret": internalSecret
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          profileBlurb = data?.bio ?? null;
+          profileAvatarUrl = data?.avatarDisplayUrl ?? null;
+          profileAvatarShape = data?.avatarShape ?? null;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load profile info:", e);
+    }
+
     // Notify admin app to send Apprise notifications (keeps endpoints private)
     const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
     const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
@@ -69,7 +94,10 @@ export async function GET(
       description: device.description,
       photoUrl: photoDisplayUrl,
       uniqueCode: device.uniqueCode,
-      messages: device.messages ?? []
+      messages: device.messages ?? [],
+      profileBlurb,
+      profileAvatarUrl,
+      profileAvatarShape
     });
   } catch (error) {
     console.error("Get public device error:", error);
