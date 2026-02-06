@@ -1,11 +1,22 @@
 {
-  "name": "app",
+  "name": "qr-finder",
   "private": true,
+  "workspaces": [
+    "apps/admin",
+    "apps/public",
+    "packages/shared"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "yarn --cwd apps/admin dev",
+    "dev:admin": "yarn --cwd apps/admin dev",
+    "dev:public": "yarn --cwd apps/public dev",
+    "build": "yarn --cwd apps/admin build",
+    "build:admin": "yarn --cwd apps/admin build",
+    "build:public": "yarn --cwd apps/public build",
+    "start": "yarn --cwd apps/admin start",
+    "start:admin": "yarn --cwd apps/admin start",
+    "start:public": "yarn --cwd apps/public start",
+    "lint": "yarn --cwd apps/admin lint"
   },
   "prisma": {
     "seed": "tsx --require dotenv/config scripts/seed.ts"
