@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@shared/lib/db";
-import { sendAppriseNotification } from "@shared/lib/apprise";
 import { sanitizeNickname, sanitizeMessage } from "@shared/lib/sanitize";
 import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitResponse } from "@shared/lib/rate-limit";
 
@@ -70,31 +69,28 @@ export async function POST(
       }
     });
 
-    // Send Apprise notifications for new message
-    const notificationTitle = `New Message for ${device.name}`;
-    const notificationBody = `From: ${nickname}\n\n${message}`;
-
-    // 1. Send to device-specific Apprise URL if configured
-    if (device.appriseUrl) {
+    // Notify admin app to send Apprise notifications (keeps endpoints private)
+    const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
+    const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
+    if (internalSecret) {
       try {
-        await sendAppriseNotification(device.appriseUrl, notificationTitle, notificationBody);
+        await fetch(`${adminNotifyUrl}/api/internal/notify`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": internalSecret
+          },
+          body: JSON.stringify({
+            type: "message",
+            deviceId: device.id,
+            deviceName: device.name,
+            nickname,
+            message
+          })
+        });
       } catch (e) {
-        console.error("Failed to send device Apprise notification:", e);
+        console.error("Failed to notify admin app:", e);
       }
-    }
-
-    // 2. Send to all global Apprise endpoints
-    try {
-      const globalEndpoints = await prisma.appriseEndpoint.findMany();
-      for (const endpoint of globalEndpoints) {
-        try {
-          await sendAppriseNotification(endpoint.url, notificationTitle, notificationBody);
-        } catch (e) {
-          console.error(`Failed to send to endpoint ${endpoint.name}:`, e);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch global endpoints:", e);
     }
 
     return NextResponse.json(newMessage);

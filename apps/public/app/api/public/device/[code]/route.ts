@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@shared/lib/db";
 import { getFileUrl } from "@shared/lib/storage";
-import { sendAppriseNotification } from "@shared/lib/apprise";
 import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitResponse } from "@shared/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -42,37 +41,26 @@ export async function GET(
       }
     }
 
-    // Trigger Apprise notifications
-    const notificationTitle = "Lost & Found Alert";
-    const notificationBody = `Someone scanned the QR code for: ${device.name}`;
-
-    // 1. Send to device-specific Apprise URL if configured
-    if (device?.appriseUrl) {
+    // Notify admin app to send Apprise notifications (keeps endpoints private)
+    const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
+    const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
+    if (internalSecret) {
       try {
-        const result = await sendAppriseNotification(device.appriseUrl, notificationTitle, notificationBody);
-        if (!result.ok) {
-          console.error("Device Apprise notification failed:", result.error);
-        }
+        await fetch(`${adminNotifyUrl}/api/internal/notify`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": internalSecret
+          },
+          body: JSON.stringify({
+            type: "scan",
+            deviceId: device.id,
+            deviceName: device.name
+          })
+        });
       } catch (e) {
-        console.error("Failed to send device Apprise notification:", e);
+        console.error("Failed to notify admin app:", e);
       }
-    }
-
-    // 2. Send to all global Apprise endpoints
-    try {
-      const globalEndpoints = await prisma.appriseEndpoint.findMany();
-      for (const endpoint of globalEndpoints) {
-        try {
-          const result = await sendAppriseNotification(endpoint.url, notificationTitle, notificationBody);
-          if (!result.ok) {
-            console.error(`Global endpoint ${endpoint.name} failed:`, result.error);
-          }
-        } catch (e) {
-          console.error(`Failed to send to endpoint ${endpoint.name}:`, e);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch global endpoints:", e);
     }
 
     return NextResponse.json({

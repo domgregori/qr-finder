@@ -69,6 +69,12 @@ ADMIN_NAME=Admin
 # Public app DB user password (limited permissions)
 PUBLIC_DB_PASSWORD=public_app_password
 
+# Internal secret shared between public and admin for notifications
+INTERNAL_NOTIFY_SECRET=change-me
+
+# Public app -> admin app internal URL
+ADMIN_INTERNAL_URL=http://admin:3000
+
 # Optional: set custom DNS server for Docker container
 DOCKER_DNS=
 
@@ -393,6 +399,8 @@ yarn dev
 | `DATABASE_URL`                   | Yes       | -           | PostgreSQL connection string (admin) |
 | `PUBLIC_DATABASE_URL`            | No        | -           | PostgreSQL connection string (public) |
 | `PUBLIC_DB_PASSWORD`             | No        | `public_app_password` | Public DB user password |
+| `ADMIN_INTERNAL_URL`             | No        | `http://admin:3000` | Internal admin URL for public notifications |
+| `INTERNAL_NOTIFY_SECRET`         | No        | -           | Shared secret for internal notifications |
 | `POSTGRES_PASSWORD`              | Docker    | `changeme`  | PostgreSQL password (docker-compose) |
 | `NEXTAUTH_URL`                   | Yes       | -           | Your app's public URL                |
 | `NEXTAUTH_SECRET`                | Yes       | -           | Session encryption secret            |
