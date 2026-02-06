@@ -31,3 +31,5 @@ prisma/dev.db-journal
 *.log
 *.tmp
 
+uploads/
+postgres-data/

@@ -18,6 +18,14 @@ Concept piece. Hasn't had a security review.
 - **Light/Dark Mode**: Full theme support across all pages
 - **Self-Host Friendly**: Local file storage, included PostgreSQL, minimal dependencies
 
+## Repo Structure
+
+```
+apps/admin   # Admin dashboard + private APIs
+apps/public  # Public portal + public APIs
+packages/shared # Shared components, hooks, and server utilities
+```
+
 ---
 
 ## Quick Start (Docker - Recommended)
@@ -50,10 +58,16 @@ NEXTAUTH_URL=http://localhost:3000
 # Database connection (optional override)
 DATABASE_URL=postgresql://lostfound:your-secure-password@db:5432/lostfound
 
+# Public app DB connection (optional override)
+PUBLIC_DATABASE_URL=postgresql://public_app:public_app_password@db:5432/lostfound
+
 # Optional: Admin seed credentials
 ADMIN_EMAIL=admin@lostfound.local
 ADMIN_PASSWORD=admin123
 ADMIN_NAME=Admin
+
+# Public app DB user password (limited permissions)
+PUBLIC_DB_PASSWORD=public_app_password
 
 # Optional: set custom DNS server for Docker container
 DOCKER_DNS=
@@ -65,27 +79,29 @@ NTFY_EXTRA_HOSTS=
 ### 3. Start the Application
 
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 4. Initialize Database
 
 ```bash
 # Push database schema
-docker-compose exec app npx prisma db push
+docker compose exec admin npx prisma db push
 
 # Create admin user
-docker-compose exec app npx prisma db seed
+docker compose exec admin npx prisma db seed
 ```
 
 ### 5. Access the App
 
-Open <http://localhost:3000> and login with:
+Open <http://localhost:3000> (admin) and login with:
 
 - **Email**: `admin@lostfound.local` (or `ADMIN_EMAIL`)
 - **Password**: `admin123` (or `ADMIN_PASSWORD`)
 
 ⚠️ **Change this password in production!**
+
+Public portal (if running locally): <http://localhost:3001>
 
 ---
 
@@ -95,9 +111,15 @@ Open <http://localhost:3000> and login with:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│   Next.js App   │────▶│   PostgreSQL    │
-│   (Port 3000)   │     │   (Port 5432)   │
+│  Admin App      │────▶│   PostgreSQL    │
+│  (Port 3000)    │     │   (Port 5432)   │
 └────────┬────────┘     └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Public App     │
+│  (Port 3001)    │
+└─────────────────┘
          │
          ▼
 ┌─────────────────┐
@@ -145,14 +167,18 @@ AWS_SECRET_ACCESS_KEY=your-secret
 #### Option 1: Included PostgreSQL (Default)
 
 The docker-compose.yml includes a PostgreSQL container. Data is persisted in a Docker volume.
+The public app uses a restricted DB user by default (`public_app`) for read‑only access plus message inserts.
 
 #### Option 2: External PostgreSQL
 
 Comment out the `db` service in docker-compose.yml and set your external database URL:
 
 ```bash
-# In .env
+# In .env (admin)
 DATABASE_URL=postgresql://user:password@your-host:5432/lostfound?sslmode=require
+
+# In .env (public)
+PUBLIC_DATABASE_URL=postgresql://public_app:public_app_password@your-host:5432/lostfound?sslmode=require
 ```
 
 ### Notification Services
@@ -364,7 +390,9 @@ yarn dev
 
 | Variable                         | Required  | Default     | Description                          |
 | -------------------------------- | --------- | ----------- | ------------------------------------ |
-| `DATABASE_URL`                   | Yes       | -           | PostgreSQL connection string         |
+| `DATABASE_URL`                   | Yes       | -           | PostgreSQL connection string (admin) |
+| `PUBLIC_DATABASE_URL`            | No        | -           | PostgreSQL connection string (public) |
+| `PUBLIC_DB_PASSWORD`             | No        | `public_app_password` | Public DB user password |
 | `POSTGRES_PASSWORD`              | Docker    | `changeme`  | PostgreSQL password (docker-compose) |
 | `NEXTAUTH_URL`                   | Yes       | -           | Your app's public URL                |
 | `NEXTAUTH_SECRET`                | Yes       | -           | Session encryption secret            |
@@ -385,10 +413,10 @@ yarn dev
 
 ```bash
 # Backup
-docker-compose exec db pg_dump -U lostfound lostfound > backup.sql
+docker compose exec db pg_dump -U lostfound lostfound > backup.sql
 
 # Restore
-cat backup.sql | docker-compose exec -T db psql -U lostfound lostfound
+cat backup.sql | docker compose exec -T db psql -U lostfound lostfound
 ```
 
 ### File Storage Backup
@@ -410,10 +438,10 @@ tar -xzf uploads-backup.tar.gz
 git pull
 
 # Rebuild and restart
-docker-compose up -d --build
+docker compose up -d --build
 
 # Run any database migrations
-docker-compose exec app npx prisma db push
+docker compose exec admin npx prisma db push
 ```
 
 ---
