@@ -49,7 +49,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { bio: rawBio, avatarUrl, avatarShape, removeAvatar } = body ?? {};
 
-    const bio = typeof rawBio === "string" ? rawBio.trim().slice(0, 240) : null;
+    const bio = typeof rawBio === "string" ? rawBio.trim().slice(0, 1000) : null;
     const shape = typeof avatarShape === "string" ? avatarShape : null;
     const validShape = shape === "circle" || shape === "rounded" || shape === "square" ? shape : null;
 
