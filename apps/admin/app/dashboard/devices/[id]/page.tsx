@@ -406,13 +406,13 @@ export default function DeviceDetailPage() {
                       ))}
                     </select>
 
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex items-stretch gap-2">
                       <input
                         type="text"
                         value={customAppriseUrl}
                         onChange={(e) => setCustomAppriseUrl(e.target.value)}
                         placeholder="Add custom URL (e.g., ntfy://my-topic)"
-                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
+                        className="flex-1 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
                       />
                       <button
                         type="button"
@@ -420,7 +420,7 @@ export default function DeviceDetailPage() {
                           addAppriseUrl(customAppriseUrl);
                           setCustomAppriseUrl("");
                         }}
-                        className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                        className="h-10 px-3 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                       >
                         Add
                       </button>
