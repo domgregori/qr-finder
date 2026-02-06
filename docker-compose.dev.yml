@@ -1,0 +1,13 @@
+services:
+  admin:
+    volumes:
+      - ./:/apps
+      - /apps/node_modules
+      - /apps/apps/admin/.next
+    command: sh -c "yarn install && yarn --cwd apps/admin dev"
+  public:
+    volumes:
+      - ./:/apps
+      - /apps/node_modules
+      - /apps/apps/public/.next
+    command: sh -c "yarn install && yarn --cwd apps/public dev"
