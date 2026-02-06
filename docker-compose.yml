@@ -1,10 +1,12 @@
 name: qr-finder
 services:
-  app:
-    container_name: app
+  admin:
+    container_name: admin
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_DIR: apps/admin
     ports:
       - "3000:3000"
     environment:
@@ -13,17 +15,51 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
-      # Storage: Set STORAGE_TYPE=local for local file storage, or configure S3
+      - PUBLIC_PORTAL_URL=${PUBLIC_PORTAL_URL:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@lostfound.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_NAME=${ADMIN_NAME:-Admin}
+      - PUBLIC_DB_PASSWORD=${PUBLIC_DB_PASSWORD:-public_app_password}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME:-}
+      - AWS_FOLDER_PREFIX=${AWS_FOLDER_PREFIX:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - DOCKER_DNS=${DOCKER_DNS:-}
+      - NTFY_EXTRA_HOSTS=${NTFY_EXTRA_HOSTS:-}
+    dns:
+      - "${DOCKER_DNS:-}"
+    extra_hosts:
+      - "${NTFY_EXTRA_HOSTS:-}"
+    volumes:
+      - ./uploads:/apps/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  public:
+    container_name: public
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_DIR: apps/public
+    ports:
+      - "3001:3000"
+    environment:
+      - PUBLIC_DB_PASSWORD=${PUBLIC_DB_PASSWORD:-public_app_password}
+      - DATABASE_URL=${PUBLIC_DATABASE_URL:-postgresql://public_app:${PUBLIC_DB_PASSWORD:-public_app_password}@db:5432/lostfound}
+      - NEXTAUTH_URL=${PUBLIC_PORTAL_URL:-http://localhost:3001}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
       - STORAGE_TYPE=${STORAGE_TYPE:-local}
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME:-}
       - AWS_FOLDER_PREFIX=${AWS_FOLDER_PREFIX:-}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-    extra_hosts:
-      - "${NTFY_EXTRA_HOSTS:-}"
-    volumes:
-      - uploads:/app/uploads
+      - SKIP_DB_PUSH=1
     depends_on:
       db:
         condition: service_healthy
@@ -36,15 +72,14 @@ services:
       - POSTGRES_USER=lostfound
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
       - POSTGRES_DB=lostfound
+      - PUBLIC_DB_PASSWORD=${PUBLIC_DB_PASSWORD:-public_app_password}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lostfound"]
+      timeout: 30s
       interval: 5s
-      timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
-
-volumes:
-  postgres-data:
-  uploads:
