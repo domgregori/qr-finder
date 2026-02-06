@@ -10,11 +10,15 @@ import { randomUUID } from "crypto";
 const STORAGE_TYPE = process.env.STORAGE_TYPE || "local";
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "./uploads";
 
+function getUploadsRoot(): string {
+  return path.isAbsolute(UPLOADS_DIR) ? UPLOADS_DIR : path.join(process.cwd(), UPLOADS_DIR);
+}
+
 // Ensure uploads directory exists for local storage
 async function ensureUploadsDir() {
   if (STORAGE_TYPE === "local") {
     try {
-      await fs.mkdir(path.join(process.cwd(), UPLOADS_DIR), { recursive: true });
+      await fs.mkdir(getUploadsRoot(), { recursive: true });
     } catch (error) {
       // Directory may already exist
     }
@@ -78,7 +82,9 @@ export async function getFileUrl(
 export async function deleteFile(storagePath: string): Promise<void> {
   if (isLocalStorage() || storagePath.startsWith("uploads/")) {
     try {
-      const fullPath = path.join(process.cwd(), storagePath);
+      const base = getUploadsRoot();
+      const relativePath = storagePath.startsWith("uploads/") ? storagePath.slice("uploads/".length) : storagePath;
+      const fullPath = path.join(base, relativePath);
       await fs.unlink(fullPath);
     } catch (error) {
       console.error("Failed to delete local file:", error);
@@ -99,7 +105,9 @@ export async function saveLocalFile(
   buffer: Buffer
 ): Promise<void> {
   await ensureUploadsDir();
-  const fullPath = path.join(process.cwd(), storagePath);
+  const base = getUploadsRoot();
+  const relativePath = storagePath.startsWith("uploads/") ? storagePath.slice("uploads/".length) : storagePath;
+  const fullPath = path.join(base, relativePath);
   const dir = path.dirname(fullPath);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(fullPath, buffer);
@@ -109,6 +117,8 @@ export async function saveLocalFile(
  * Read file from local storage
  */
 export async function readLocalFile(storagePath: string): Promise<Buffer> {
-  const fullPath = path.join(process.cwd(), storagePath);
+  const base = getUploadsRoot();
+  const relativePath = storagePath.startsWith("uploads/") ? storagePath.slice("uploads/".length) : storagePath;
+  const fullPath = path.join(base, relativePath);
   return fs.readFile(fullPath);
 }

@@ -21,11 +21,12 @@ services:
       - ADMIN_NAME=${ADMIN_NAME:-Admin}
       - INTERNAL_NOTIFY_SECRET=${INTERNAL_NOTIFY_SECRET:-}
       - PUBLIC_DB_PASSWORD=${PUBLIC_DB_PASSWORD:-public_app_password}
-      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME:-}
-      - AWS_FOLDER_PREFIX=${AWS_FOLDER_PREFIX:-}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # - AWS_BUCKET_NAME=${AWS_BUCKET_NAME:-}
+      # - AWS_FOLDER_PREFIX=${AWS_FOLDER_PREFIX:-}
+      # - AWS_REGION=${AWS_REGION:-us-east-1}
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - UPLOADS_DIR=/apps/uploads
       - DOCKER_DNS=${DOCKER_DNS:-}
       - NTFY_EXTRA_HOSTS=${NTFY_EXTRA_HOSTS:-}
     dns:
@@ -57,12 +58,13 @@ services:
       - ADMIN_INTERNAL_URL=${ADMIN_INTERNAL_URL:-http://admin:3000}
       - INTERNAL_NOTIFY_SECRET=${INTERNAL_NOTIFY_SECRET:-}
       - STORAGE_TYPE=${STORAGE_TYPE:-local}
-      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME:-}
-      - AWS_FOLDER_PREFIX=${AWS_FOLDER_PREFIX:-}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # - AWS_BUCKET_NAME=${AWS_BUCKET_NAME:-}
+      # - AWS_FOLDER_PREFIX=${AWS_FOLDER_PREFIX:-}
+      # - AWS_REGION=${AWS_REGION:-us-east-1}
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - SKIP_DB_PUSH=1
+      - UPLOADS_DIR=/apps/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -85,4 +87,9 @@ services:
       interval: 5s
       retries: 10
       start_period: 40s
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
     restart: unless-stopped
