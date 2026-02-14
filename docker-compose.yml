@@ -27,10 +27,7 @@ services:
       # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - UPLOADS_DIR=/apps/uploads
-      - DOCKER_DNS=${DOCKER_DNS:-}
       - NTFY_EXTRA_HOSTS=${NTFY_EXTRA_HOSTS:-}
-    dns:
-      - "${DOCKER_DNS:-}"
     extra_hosts:
       - "${NTFY_EXTRA_HOSTS:-}"
     volumes:

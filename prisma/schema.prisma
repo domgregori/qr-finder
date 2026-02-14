@@ -15,7 +15,6 @@ model User {
   name          String?
   bio           String?
   avatarUrl     String?
-  avatarShape   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
