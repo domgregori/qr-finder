@@ -1,0 +1,22 @@
+{
+  "name": "@qrfinder/admin-public-combined",
+  "private": false,
+  "version": "0.1.0",
+  "description": "Meta package that installs both @qrfinder/admin and @qrfinder/public",
+  "bin": {
+    "qrfinder-admin": "bin/qrfinder-admin.js",
+    "qrfinder-public": "bin/qrfinder-public.js",
+    "qrfinder-full": "bin/qrfinder-full.js"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "dependencies": {
+    "@qrfinder/admin": "0.1.0",
+    "@qrfinder/public": "0.1.0"
+  }
+}

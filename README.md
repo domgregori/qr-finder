@@ -340,29 +340,29 @@ For local development without Docker:
 
 - Node.js 18+
 - PostgreSQL (or use SQLite for quick testing)
-- Yarn
+- npm
 
 ### Steps
 
 ```bash
 # Install dependencies
-yarn install
+npm install
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your settings
 
 # Generate Prisma client
-yarn prisma generate
+npx prisma generate
 
 # Push database schema
-yarn prisma db push
+npx prisma db push
 
 # Seed admin user
-yarn prisma db seed
+npx prisma db seed
 
 # Start dev server
-yarn dev
+npm run dev
 ```
 
 ---
