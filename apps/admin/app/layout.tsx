@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@shared/components/providers";
-
-const inter = Inter({ subsets: ["latin"] });
+import { ThemeToggleFab } from "@shared/components/theme-toggle-fab";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +31,11 @@ export default function RootLayout({
         <script src="https://apps.abacus.ai/chatllm/appllm-lib.js"></script>
         <style dangerouslySetInnerHTML={{ __html: `[data-hydration-error] { display: none !important; }` }} />
       </head>
-      <body className={inter.className} suppressHydrationWarning>
-        <Providers>{children}</Providers>
+      <body className="font-sans" suppressHydrationWarning>
+        <Providers>
+          {children}
+          <ThemeToggleFab />
+        </Providers>
       </body>
     </html>
   );

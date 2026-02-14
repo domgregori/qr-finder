@@ -15,10 +15,10 @@ export async function GET(req: Request) {
     const user = adminEmail
       ? await prisma.user.findUnique({
           where: { email: adminEmail },
-          select: { email: true, name: true, bio: true, avatarUrl: true, avatarShape: true }
+          select: { email: true, name: true, bio: true, avatarUrl: true }
         })
       : await prisma.user.findFirst({
-          select: { email: true, name: true, bio: true, avatarUrl: true, avatarShape: true }
+          select: { email: true, name: true, bio: true, avatarUrl: true }
         });
 
     const avatarDisplayUrl = user?.avatarUrl ? await getFileUrl(user.avatarUrl, true) : null;
@@ -29,7 +29,6 @@ export async function GET(req: Request) {
       bio: user?.bio ?? null,
       avatarDisplayUrl,
       avatarPath: user?.avatarUrl ?? null,
-      avatarShape: user?.avatarShape ?? null
     });
   } catch (error) {
     console.error("Internal profile error:", error);

@@ -207,6 +207,10 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
   const [centerTextSize, setCenterTextSize] = useState(1);
   const [centerTextColor, setCenterTextColor] = useState("#000000");
   const [centerTextColorLocked, setCenterTextColorLocked] = useState(true);
+  const [fgHex, setFgHex] = useState(fgColor);
+  const [bgHex, setBgHex] = useState(bgColor);
+  const [accentHex, setAccentHex] = useState(accentColor);
+  const [centerTextHex, setCenterTextHex] = useState(centerTextColor);
   const [shadowDepth, setShadowDepth] = useState(8);
   const [shadowRounded, setShadowRounded] = useState(false);
   const [exportBackground, setExportBackground] = useState<"white" | "transparent">("white");
@@ -276,6 +280,23 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
 
     initializedRef.current = true;
   }, [initialSettings]);
+
+  useEffect(() => setFgHex(fgColor), [fgColor]);
+  useEffect(() => setBgHex(bgColor), [bgColor]);
+  useEffect(() => setAccentHex(accentColor), [accentColor]);
+  useEffect(() => setCenterTextHex(centerTextColor), [centerTextColor]);
+
+  const normalizeHex = (value: string) => {
+    const next = value.trim();
+    if (!next.startsWith("#")) return null;
+    if (/^#[0-9a-fA-F]{3}$/.test(next)) {
+      return `#${next[1]}${next[1]}${next[2]}${next[2]}${next[3]}${next[3]}`;
+    }
+    if (/^#[0-9a-fA-F]{6}$/.test(next)) {
+      return next;
+    }
+    return null;
+  };
 
   const currentSettings = useMemo<QrSettings>(() => ({
     size,
@@ -783,10 +804,11 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     if (!qrCanvas) return;
 
     // Create a new canvas with the full design
+    const exportQrSize = 1024;
     const padding = 40;
     const textHeight = (includeLabel ? 30 : 0) + (overlayText ? 20 : 0) + (secondaryText ? 18 : 0);
-    const totalWidth = size + padding * 2;
-    const totalHeight = size + padding * 2 + textHeight;
+    const totalWidth = exportQrSize + padding * 2;
+    const totalHeight = exportQrSize + padding * 2 + textHeight;
 
     const exportCanvas = document.createElement("canvas");
     exportCanvas.width = totalWidth;
@@ -804,14 +826,14 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
 
     // QR background (only the QR area, not the full canvas)
     if (showGradientBg) {
-      const gradient = ctx.createLinearGradient(padding, padding, padding + size, padding + size);
+      const gradient = ctx.createLinearGradient(padding, padding, padding + exportQrSize, padding + exportQrSize);
       gradient.addColorStop(0, bgColor);
       gradient.addColorStop(1, lightenColor(bgColor, 20));
       ctx.fillStyle = gradient;
     } else {
       ctx.fillStyle = bgColor;
     }
-    ctx.fillRect(padding, padding, size, size);
+    ctx.fillRect(padding, padding, exportQrSize, exportQrSize);
 
     const frameRadius = frameStyle === "rounded" || (frameStyle === "shadow" && shadowRounded) ? 24 : 12;
     const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
@@ -882,14 +904,15 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     }
 
     // Draw QR code
-    ctx.drawImage(qrCanvas, padding, padding);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(qrCanvas, padding, padding, exportQrSize, exportQrSize);
 
     // Center content (icon or custom text)
     if (hasCenterContent) {
       const isCustomText = centerIcon === "custom";
       const fontSize = isCustomText
-        ? Math.max(8, Math.min(size / 6, (size / 4) / Math.max(1, centerContent.length / 3)) * centerTextSize)
-        : size / 5;
+        ? Math.max(8, Math.min(exportQrSize / 6, (exportQrSize / 4) / Math.max(1, centerContent.length / 3)) * centerTextSize)
+        : exportQrSize / 5;
       ctx.font = isCustomText ? `bold ${fontSize}px sans-serif` : `${fontSize}px serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -900,15 +923,15 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
       const bgWidth = textWidth + centerPaddingH * 2;
       const bgHeight = textHeight + centerPaddingV * 2;
       
-      drawCenterBackground(ctx, padding + size / 2, padding + size / 2, bgWidth, bgHeight, centerBgShape);
+      drawCenterBackground(ctx, padding + exportQrSize / 2, padding + exportQrSize / 2, bgWidth, bgHeight, centerBgShape);
       
       const centerContentColor = isCustomText ? centerTextColor : fgColor;
       ctx.fillStyle = centerContentColor;
-      ctx.fillText(centerContent, padding + size / 2, padding + size / 2 + 2);
+      ctx.fillText(centerContent, padding + exportQrSize / 2, padding + exportQrSize / 2 + 2);
     }
 
     // Text
-    let textY = padding + size + 25;
+    let textY = padding + exportQrSize + 25;
     ctx.textAlign = "center";
 
     if (includeLabel) {
@@ -971,9 +994,10 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
 
   return (
     <div className="space-y-6">
-      <div className="sticky top-24 z-10 space-y-4 rounded-2xl bg-white/85 dark:bg-black/80 ring-1 ring-gray-200/70 dark:ring-gray-700/70 p-4 shadow-lg">
-        {(profileBlurb || profileAvatarUrl) && (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+      <div className="sticky top-24 z-10">
+        <div className="space-y-4 rounded-2xl bg-white dark:bg-black/80 ring-1 ring-gray-200/70 dark:ring-gray-700/70 p-4 shadow-lg">
+          {(profileBlurb || profileAvatarUrl) && (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">About</p>
               <div className="flex gap-3 items-start">
                 {profileAvatarUrl && (
@@ -1070,6 +1094,7 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
             <Download size={18} /> Download PNG
           </button>
         </div>
+      </div>
 
       <div className="space-y-6">
         {/* Theme Presets */}
@@ -1127,7 +1152,7 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Maximize2 size={14} /> Size
+              <Maximize2 size={14} /> Zoom
             </label>
             <input
               type="range"
@@ -1137,7 +1162,7 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               onChange={(e) => setSize(Number(e.target.value))}
               className="w-full accent-orange-500"
             />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{size}px</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">{Math.round((size / 200) * 100)}%</span>
           </div>
 
           <div>
@@ -1239,6 +1264,27 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               onChange={(e) => { setFgColor(e.target.value); setActiveTheme(null); }}
               className="w-full h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
             />
+            <input
+              type="text"
+              value={fgHex}
+              onChange={(e) => setFgHex(e.target.value)}
+              onBlur={() => {
+                const next = normalizeHex(fgHex);
+                if (next) {
+                  setFgColor(next);
+                  setActiveTheme(null);
+                } else {
+                  setFgHex(fgColor);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="#000000"
+            />
           </div>
 
           <div>
@@ -1251,6 +1297,27 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               onChange={(e) => { setBgColor(e.target.value); setActiveTheme(null); }}
               className="w-full h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
             />
+            <input
+              type="text"
+              value={bgHex}
+              onChange={(e) => setBgHex(e.target.value)}
+              onBlur={() => {
+                const next = normalizeHex(bgHex);
+                if (next) {
+                  setBgColor(next);
+                  setActiveTheme(null);
+                } else {
+                  setBgHex(bgColor);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="#ffffff"
+            />
           </div>
 
           <div>
@@ -1262,6 +1329,27 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               value={accentColor}
               onChange={(e) => { setAccentColor(e.target.value); setActiveTheme(null); }}
               className="w-full h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
+            />
+            <input
+              type="text"
+              value={accentHex}
+              onChange={(e) => setAccentHex(e.target.value)}
+              onBlur={() => {
+                const next = normalizeHex(accentHex);
+                if (next) {
+                  setAccentColor(next);
+                  setActiveTheme(null);
+                } else {
+                  setAccentHex(accentColor);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="#000000"
             />
           </div>
         </div>
@@ -1384,6 +1472,27 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
                   Use Accent
                 </button>
               </div>
+              <input
+                type="text"
+                value={centerTextHex}
+                onChange={(e) => setCenterTextHex(e.target.value)}
+                onBlur={() => {
+                  const next = normalizeHex(centerTextHex);
+                  if (next) {
+                    setCenterTextColor(next);
+                    setCenterTextColorLocked(false);
+                  } else {
+                    setCenterTextHex(centerTextColor);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  }
+                }}
+                className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                placeholder="#000000"
+              />
             </div>
           </div>
         )}

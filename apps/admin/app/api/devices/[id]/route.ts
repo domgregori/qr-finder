@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@shared/lib/auth-options";
 import { prisma } from "@shared/lib/db";
-import { deleteFile } from "@shared/lib/storage";
+import { deleteFile, getFileUrl } from "@shared/lib/storage";
 import { sanitizeDeviceName, sanitizeDescription, sanitizeUrl } from "@shared/lib/sanitize";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,16 @@ export async function GET(
       return NextResponse.json({ error: "Device not found" }, { status: 404 });
     }
 
-    return NextResponse.json(device);
+    let photoDisplayUrl: string | null = null;
+    if (device.photoUrl) {
+      try {
+        photoDisplayUrl = await getFileUrl(device.photoUrl, device.isPublicPhoto);
+      } catch (e) {
+        console.error("Failed to get device photo URL:", e);
+      }
+    }
+
+    return NextResponse.json({ ...device, photoDisplayUrl });
   } catch (error) {
     console.error("Get device error:", error);
     return NextResponse.json(
@@ -59,6 +68,7 @@ export async function PUT(
       includeBio,
       photoUrl,
       isPublicPhoto,
+      removePhoto,
       qrSettings
     } = body ?? {};
 
@@ -74,6 +84,22 @@ export async function PUT(
         : []
       : undefined;
 
+    const existing = await prisma.device.findUnique({
+      where: { id: params?.id ?? "" },
+      select: { photoUrl: true, isPublicPhoto: true }
+    });
+
+    if (removePhoto && existing?.photoUrl) {
+      await deleteFile(existing.photoUrl);
+    }
+    if (
+      typeof photoUrl === "string" &&
+      existing?.photoUrl &&
+      existing.photoUrl !== photoUrl
+    ) {
+      await deleteFile(existing.photoUrl);
+    }
+
     const device = await prisma.device.update({
       where: { id: params?.id ?? "" },
       data: {
@@ -82,7 +108,7 @@ export async function PUT(
         appriseUrl: appriseUrls ? (appriseUrls[0] ?? null) : appriseUrl,
         appriseUrls,
         includeBio: includeBio !== undefined ? includeBio : undefined,
-        photoUrl: photoUrl ?? undefined,
+        photoUrl: removePhoto ? null : photoUrl ?? undefined,
         isPublicPhoto: isPublicPhoto ?? undefined,
         qrSettings: qrSettings !== undefined ? qrSettings : undefined
       }

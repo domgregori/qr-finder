@@ -26,7 +26,6 @@ interface DeviceData {
   messages: Message[];
   profileBlurb?: string | null;
   profileAvatarUrl?: string | null;
-  profileAvatarShape?: "circle" | "rounded" | "square" | null;
   includeBio?: boolean | null;
 }
 
@@ -457,7 +456,7 @@ export default function PublicDevicePage() {
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">{t.aboutOwner}</p>
             <div className="flex flex-col md:flex-row md:items-start gap-5">
               {device?.profileAvatarUrl && (
-                <div className="md:w-3/5 w-full">
+                <div className="md:w-3/5 w-full order-1">
                   <div className="w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
                     <img
                       src={device.profileAvatarUrl}
@@ -468,8 +467,8 @@ export default function PublicDevicePage() {
                 </div>
               )}
               {device?.profileBlurb && (
-                <div className="md:w-2/5 w-full">
-                  <p className="text-gray-700 dark:text-gray-200 text-base md:text-lg font-serif leading-relaxed whitespace-pre-wrap">
+                <div className="md:w-2/5 w-full order-2 md:order-none mt-3 md:mt-0">
+                  <p className="bio-font text-gray-700 dark:text-gray-200 text-base md:text-lg leading-relaxed whitespace-pre-wrap">
                     {device.profileBlurb}
                   </p>
                 </div>

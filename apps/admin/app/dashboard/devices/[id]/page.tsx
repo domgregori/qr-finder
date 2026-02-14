@@ -24,6 +24,8 @@ interface Device {
   name: string;
   description: string | null;
   photoUrl: string | null;
+  photoDisplayUrl?: string | null;
+  isPublicPhoto?: boolean | null;
   appriseUrl: string | null;
   appriseUrls?: string[] | null;
   includeBio?: boolean | null;
@@ -44,6 +46,7 @@ export default function DeviceDetailPage() {
   const params = useParams();
   const id = params?.id as string;
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [device, setDevice] = useState<Device | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +64,11 @@ export default function DeviceDetailPage() {
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [appriseEndpoints, setAppriseEndpoints] = useState<AppriseEndpoint[]>([]);
   const [editIncludeBio, setEditIncludeBio] = useState(true);
+  const [editPhotoUrl, setEditPhotoUrl] = useState("");
+  const [editPhotoDisplayUrl, setEditPhotoDisplayUrl] = useState<string | null>(null);
+  const [editIsPublicPhoto, setEditIsPublicPhoto] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Regenerate code modal states
@@ -148,6 +156,10 @@ export default function DeviceDetailPage() {
             : [];
         setEditAppriseUrls(urls.filter((url: string) => typeof url === "string" && url.trim().length > 0));
         setEditIncludeBio(typeof data?.includeBio === "boolean" ? data.includeBio : true);
+        setEditPhotoUrl(data?.photoUrl ?? "");
+        setEditPhotoDisplayUrl(data?.photoDisplayUrl ?? null);
+        setEditIsPublicPhoto(typeof data?.isPublicPhoto === "boolean" ? data.isPublicPhoto : true);
+        setRemovePhoto(false);
       } else {
         router.push("/dashboard");
       }
@@ -245,6 +257,70 @@ export default function DeviceDetailPage() {
     }
   };
 
+  const handlePhotoUpload = async (file: File) => {
+    if (!file) return;
+    setUploadingPhoto(true);
+    setError("");
+
+    try {
+      const presignedRes = await fetch("/api/upload/presigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          isPublic: editIsPublicPhoto
+        })
+      });
+
+      if (!presignedRes.ok) throw new Error("Failed to get upload URL");
+
+      const { uploadUrl, cloud_storage_path, useLocalUpload } = await presignedRes.json();
+
+      if (useLocalUpload) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const uploadRes = await fetch("/api/upload/local", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!uploadRes.ok) throw new Error("Failed to upload file");
+
+        const { cloud_storage_path: localPath } = await uploadRes.json();
+        setEditPhotoUrl(localPath);
+        setEditPhotoDisplayUrl(`/api/files/${encodeURIComponent(localPath)}`);
+      } else {
+        const urlParams = new URL(uploadUrl).searchParams;
+        const signedHeaders = urlParams?.get?.("X-Amz-SignedHeaders") ?? "";
+        const needsContentDisposition = signedHeaders.includes("content-disposition");
+
+        const headers: Record<string, string> = { "Content-Type": file.type };
+        if (needsContentDisposition) {
+          headers["Content-Disposition"] = "attachment";
+        }
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers,
+          body: file
+        });
+
+        if (!uploadRes.ok) throw new Error("Failed to upload file");
+
+        setEditPhotoUrl(cloud_storage_path);
+        setEditPhotoDisplayUrl(cloud_storage_path);
+      }
+      setRemovePhoto(false);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError("Failed to upload image");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const handleSaveEdit = async () => {
     if (!editName.trim()) {
       setError("Device name is required");
@@ -262,13 +338,18 @@ export default function DeviceDetailPage() {
           name: editName.trim(),
           description: editDescription.trim() || null,
           appriseUrls: editAppriseUrls,
-          includeBio: editIncludeBio
+          includeBio: editIncludeBio,
+          photoUrl: editPhotoUrl || null,
+          isPublicPhoto: editIsPublicPhoto,
+          removePhoto
         })
       });
 
       if (res.ok) {
         const updated = await res.json();
         setDevice((prev) => (prev ? { ...prev, ...updated } : prev));
+        setEditPhotoDisplayUrl(updated?.photoDisplayUrl ?? editPhotoDisplayUrl);
+        setRemovePhoto(false);
         setEditMode(false);
       }
     } catch (err) {
@@ -340,8 +421,14 @@ export default function DeviceDetailPage() {
               >
                 <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
               </Link>
-              <div className="flex items-center gap-2">
-                <MapPin size={24} className="text-orange-500" />
+              <div className="flex items-center gap-3">
+                {device?.photoDisplayUrl ? (
+                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+                    <img src={device.photoDisplayUrl} alt={device?.name ?? "Device"} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <MapPin size={24} className="text-orange-500" />
+                )}
                 <span className="font-bold text-gray-900 dark:text-white">{device?.name ?? ""}</span>
               </div>
             </div>
@@ -392,6 +479,58 @@ export default function DeviceDetailPage() {
                     />
                   </div>
                   <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400">Device Photo</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handlePhotoUpload(file);
+                      }}
+                      className="hidden"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click?.()}
+                        className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
+                      >
+                        {uploadingPhoto ? "Uploading..." : editPhotoDisplayUrl ? "Change Photo" : "Upload Photo"}
+                      </button>
+                      {editPhotoDisplayUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditPhotoDisplayUrl(null);
+                            setEditPhotoUrl("");
+                            setRemovePhoto(true);
+                          }}
+                          className="text-sm text-red-600 dark:text-red-400 hover:text-red-700"
+                        >
+                          Remove Photo
+                        </button>
+                      )}
+                    </div>
+                    {editPhotoDisplayUrl && (
+                      <div className="mt-3 w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+                        <img src={editPhotoDisplayUrl} alt="Device" className="w-full h-40 object-contain" />
+                      </div>
+                    )}
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        id="edit-public-photo"
+                        type="checkbox"
+                        checked={editIsPublicPhoto}
+                        onChange={(e) => setEditIsPublicPhoto(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="edit-public-photo" className="text-xs text-gray-600 dark:text-gray-400">
+                        Allow photo to be visible on public page
+                      </label>
+                    </div>
+                  </div>
+                  <div>
                     <label className="text-sm text-gray-600 dark:text-gray-400">Notification Endpoints</label>
                     <select
                       value={selectedEndpoint}
@@ -406,13 +545,13 @@ export default function DeviceDetailPage() {
                       ))}
                     </select>
 
-                    <div className="mt-2 flex items-stretch gap-2">
+                    <div className="mt-2">
                       <input
                         type="text"
                         value={customAppriseUrl}
                         onChange={(e) => setCustomAppriseUrl(e.target.value)}
                         placeholder="Add custom URL (e.g., ntfy://my-topic)"
-                        className="flex-1 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
+                        className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
                       />
                       <button
                         type="button"
@@ -420,7 +559,7 @@ export default function DeviceDetailPage() {
                           addAppriseUrl(customAppriseUrl);
                           setCustomAppriseUrl("");
                         }}
-                        className="h-10 px-3 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                        className="mt-2 w-full px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                       >
                         Add
                       </button>

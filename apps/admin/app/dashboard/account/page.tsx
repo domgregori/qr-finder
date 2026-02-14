@@ -5,7 +5,6 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MapPin, LogOut } from "lucide-react";
-import { ThemeToggle } from "@shared/components/theme-toggle";
 import { toast, Toaster } from "sonner";
 import Image from "next/image";
 
@@ -27,7 +26,6 @@ export default function AccountPage() {
   const [savingBio, setSavingBio] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string | null>(null);
-  const [avatarShape, setAvatarShape] = useState<"circle" | "rounded" | "square">("circle");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
@@ -65,7 +63,6 @@ export default function AccountPage() {
         setBio(data?.bio ?? "");
         setAvatarUrl(data?.avatarUrl ?? null);
         setAvatarDisplayUrl(data?.avatarDisplayUrl ?? null);
-        setAvatarShape(data?.avatarShape ?? "circle");
       }
     } catch (error) {
       console.error("Failed to load account:", error);
@@ -109,11 +106,11 @@ export default function AccountPage() {
     }
   };
 
-  const saveAvatarMeta = async (nextAvatarUrl: string | null, nextAvatarShape: "circle" | "rounded" | "square") => {
+  const saveAvatarMeta = async (nextAvatarUrl: string | null) => {
     const res = await fetch("/api/account", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatarUrl: nextAvatarUrl, avatarShape: nextAvatarShape })
+      body: JSON.stringify({ avatarUrl: nextAvatarUrl })
     });
     if (!res.ok) {
       throw new Error("Failed to save avatar settings");
@@ -173,7 +170,7 @@ export default function AccountPage() {
         nextUrl = cloud_storage_path;
       }
 
-      await saveAvatarMeta(nextUrl, avatarShape);
+      await saveAvatarMeta(nextUrl);
       await loadAccount();
       toast.success("Avatar updated.");
     } catch (error) {
@@ -204,18 +201,6 @@ export default function AccountPage() {
     }
   };
 
-  useEffect(() => {
-    if (!avatarUrl) return;
-    const syncShape = async () => {
-      try {
-        await saveAvatarMeta(avatarUrl, avatarShape);
-      } catch (error) {
-        console.error("Failed to update avatar shape:", error);
-      }
-    };
-    syncShape();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatarShape]);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,7 +269,6 @@ export default function AccountPage() {
               <span className="font-bold text-gray-900 dark:text-white">Lost & Found</span>
             </Link>
             <div className="flex items-center gap-4">
-              <ThemeToggle />
               <details className="relative">
                 <summary className="list-none cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
                   {session?.user?.email ?? ""}
@@ -370,9 +354,7 @@ export default function AccountPage() {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">About You</h2>
           <div className="grid md:grid-cols-[140px_1fr] gap-6 items-start">
             <div className="space-y-3">
-              <div className={`relative h-28 w-28 overflow-hidden bg-gray-100 dark:bg-gray-700 ${
-                avatarShape === "circle" ? "rounded-full" : avatarShape === "rounded" ? "rounded-xl" : ""
-              }`}>
+              <div className="relative h-28 w-28 overflow-hidden bg-gray-100 dark:bg-gray-700 rounded-xl">
                 {avatarDisplayUrl ? (
                   <Image src={avatarDisplayUrl} alt="Avatar" fill className="object-contain" />
                 ) : (
@@ -382,16 +364,6 @@ export default function AccountPage() {
                 )}
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-xs text-gray-500 dark:text-gray-400">Shape</label>
-                <select
-                  value={avatarShape}
-                  onChange={(e) => setAvatarShape(e.target.value as "circle" | "rounded" | "square")}
-                  className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  <option value="circle">Circle</option>
-                  <option value="rounded">Rounded</option>
-                  <option value="square">Square</option>
-                </select>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
                   <input
                     type="file"
@@ -422,12 +394,12 @@ export default function AccountPage() {
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows={4}
-                maxLength={240}
+                maxLength={1000}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Short blurb shown next to your QR code"
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 dark:text-gray-400">{bio.length}/240</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{bio.length}/1000</span>
                 <button
                   type="submit"
                   disabled={savingBio}
@@ -443,9 +415,7 @@ export default function AccountPage() {
             <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Preview</p>
             <div className="flex gap-3 items-start">
               {avatarDisplayUrl && (
-                <div className={`h-12 w-12 overflow-hidden bg-white dark:bg-gray-800 ${
-                  avatarShape === "circle" ? "rounded-full" : avatarShape === "rounded" ? "rounded-xl" : ""
-                }`}>
+                <div className="h-12 w-12 overflow-hidden bg-white dark:bg-gray-800 rounded-xl">
                   <Image src={avatarDisplayUrl} alt="Avatar preview" width={48} height={48} className="object-contain" />
                 </div>
               )}

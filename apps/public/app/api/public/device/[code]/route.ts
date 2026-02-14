@@ -44,7 +44,6 @@ export async function GET(
     // Load public profile info via admin app (keeps user table private)
     let profileBlurb: string | null = null;
     let profileAvatarUrl: string | null = null;
-    let profileAvatarShape: string | null = null;
     if (device.includeBio) {
       try {
         const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
@@ -60,9 +59,8 @@ export async function GET(
             const data = await res.json();
             profileBlurb = data?.bio ?? null;
           profileAvatarUrl = data?.avatarPath ? "/api/public/profile-image" : (data?.avatarDisplayUrl ?? null);
-            profileAvatarShape = data?.avatarShape ?? null;
-          }
         }
+      }
       } catch (e) {
         console.error("Failed to load profile info:", e);
       }
@@ -105,7 +103,6 @@ export async function GET(
       includeBio: device.includeBio ?? true,
       profileBlurb,
       profileAvatarUrl,
-      profileAvatarShape
     });
     if (!hasScanCookie) {
       response.cookies.set(scanCookieName, "1", {

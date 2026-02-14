@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@shared/lib/auth-options";
 import { prisma } from "@shared/lib/db";
 import { customAlphabet } from "nanoid";
-import { generatePresignedUploadUrl } from "@shared/lib/s3";
+import { getFileUrl } from "@shared/lib/storage";
 import { sanitizeDeviceName, sanitizeDescription, sanitizeUrl } from "@shared/lib/sanitize";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,21 @@ export async function GET() {
       }
     });
 
-    return NextResponse.json(devices);
+    const withPhotoUrls = await Promise.all(
+      devices.map(async (device) => {
+        let photoDisplayUrl: string | null = null;
+        if (device.photoUrl) {
+          try {
+            photoDisplayUrl = await getFileUrl(device.photoUrl, device.isPublicPhoto);
+          } catch (e) {
+            console.error("Failed to get device photo URL:", e);
+          }
+        }
+        return { ...device, photoDisplayUrl };
+      })
+    );
+
+    return NextResponse.json(withPhotoUrls);
   } catch (error) {
     console.error("Get devices error:", error);
     return NextResponse.json(

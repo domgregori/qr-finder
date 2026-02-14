@@ -16,7 +16,7 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { email: true, name: true, bio: true, avatarUrl: true, avatarShape: true }
+      select: { email: true, name: true, bio: true, avatarUrl: true }
     });
 
     const avatarDisplayUrl = user?.avatarUrl ? await getFileUrl(user.avatarUrl, true) : null;
@@ -26,8 +26,7 @@ export async function GET() {
       name: user?.name ?? null,
       bio: user?.bio ?? null,
       avatarUrl: user?.avatarUrl ?? null,
-      avatarDisplayUrl,
-      avatarShape: user?.avatarShape ?? null
+      avatarDisplayUrl
     });
   } catch (error) {
     console.error("Get account error:", error);
@@ -47,12 +46,9 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { bio: rawBio, avatarUrl, avatarShape, removeAvatar } = body ?? {};
+    const { bio: rawBio, avatarUrl, removeAvatar } = body ?? {};
 
     const bio = typeof rawBio === "string" ? rawBio.trim().slice(0, 1000) : null;
-    const shape = typeof avatarShape === "string" ? avatarShape : null;
-    const validShape = shape === "circle" || shape === "rounded" || shape === "square" ? shape : null;
-
     const existing = await prisma.user.findUnique({
       where: { email },
       select: { avatarUrl: true }
@@ -72,12 +68,11 @@ export async function PUT(req: Request) {
       where: { email },
       data: {
         bio,
-        avatarUrl: nextAvatarUrl,
-        avatarShape: validShape ?? undefined
+        avatarUrl: nextAvatarUrl
       }
     });
 
-    return NextResponse.json({ ok: true, bio: user.bio, avatarUrl: user.avatarUrl, avatarShape: user.avatarShape });
+    return NextResponse.json({ ok: true, bio: user.bio, avatarUrl: user.avatarUrl });
   } catch (error) {
     console.error("Update account error:", error);
     return NextResponse.json(

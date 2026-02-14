@@ -9,13 +9,13 @@ import {
   MapPin, Plus, Smartphone, MessageCircle, QrCode, Settings,
   Trash2, LogOut, ExternalLink, Search, AlertCircle, Bell
 } from "lucide-react";
-import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface Device {
   id: string;
   name: string;
   description: string | null;
   photoUrl: string | null;
+  photoDisplayUrl?: string | null;
   uniqueCode: string;
   createdAt: string;
   _count: { messages: number };
@@ -151,7 +151,6 @@ export default function DashboardPage() {
               <span className="font-bold text-gray-900 dark:text-white">Lost & Found</span>
             </Link>
             <div className="flex items-center gap-4">
-              <ThemeToggle />
               <details className="relative">
                 <summary className="list-none cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
                   {session?.user?.email ?? ""}
@@ -233,9 +232,19 @@ export default function DashboardPage() {
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                        <Smartphone size={20} className="text-blue-600 dark:text-blue-400" />
-                      </div>
+                      {device?.photoDisplayUrl ? (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                          <img
+                            src={device.photoDisplayUrl}
+                            alt={device?.name ?? "Device"}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                          <Smartphone size={20} className="text-blue-600 dark:text-blue-400" />
+                        </div>
+                      )}
                       <div>
                         <h3 className="font-semibold text-gray-900 dark:text-white">{device?.name ?? ""}</h3>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Code: {device?.uniqueCode ?? ""}</p>
