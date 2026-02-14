@@ -3,6 +3,8 @@ name: Build and Publish Docker Images
 on:
   push:
     branches: ["main", "split-admin-public"]
+    tags:
+      - "v*"
   workflow_dispatch:
 
 jobs:
