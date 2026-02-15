@@ -23,6 +23,13 @@ export async function POST(
 
     const body = await req.json();
     const { nickname: rawNickname, message: rawMessage, turnstileToken } = body ?? {};
+    const rawMessageText = typeof rawMessage === "string" ? rawMessage.trim() : "";
+    if (rawMessageText.length > 200) {
+      return NextResponse.json(
+        { error: "Message must be 200 characters or less" },
+        { status: 400 }
+      );
+    }
     
     // Sanitize inputs
     const nickname = sanitizeNickname(rawNickname);

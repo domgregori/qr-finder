@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
       args:
         APP_DIR: apps/admin
     ports:
@@ -42,6 +43,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
       args:
         APP_DIR: apps/public
     ports:

@@ -25,6 +25,9 @@ export async function GET(
       include: {
         messages: {
           orderBy: { createdAt: "asc" }
+        },
+        scans: {
+          orderBy: { createdAt: "desc" }
         }
       }
     });
@@ -42,7 +45,15 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ...device, photoDisplayUrl });
+    const viewedAt = device.lastScanViewedAt;
+    let newScanCount = 0;
+    for (const scan of device.scans ?? []) {
+      if (!viewedAt || scan.createdAt > viewedAt) {
+        newScanCount += 1;
+      }
+    }
+
+    return NextResponse.json({ ...device, photoDisplayUrl, newScanCount });
   } catch (error) {
     console.error("Get device error:", error);
     return NextResponse.json(

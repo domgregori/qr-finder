@@ -68,7 +68,7 @@ export function sanitizeNickname(nickname: string): string {
  * Sanitize message content
  */
 export function sanitizeMessage(message: string): string {
-  return sanitizeInput(message, 2000);
+  return sanitizeInput(message, 200);
 }
 
 /**

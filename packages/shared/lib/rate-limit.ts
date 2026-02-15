@@ -124,7 +124,7 @@ export const RATE_LIMITS = {
   },
   PUBLIC_WRITE: {
     windowMs: 60 * 1000,  // 1 minute  
-    maxRequests: 5,       // 5 writes per minute
+    maxRequests: 20,      // 20 writes per minute
   },
   // Authenticated endpoints - more lenient
   AUTH_READ: {

@@ -21,7 +21,11 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       include: {
         _count: {
-          select: { messages: true }
+          select: { messages: true, scans: true }
+        },
+        scans: {
+          select: { createdAt: true },
+          orderBy: { createdAt: "desc" }
         }
       }
     });
@@ -36,7 +40,16 @@ export async function GET() {
             console.error("Failed to get device photo URL:", e);
           }
         }
-        return { ...device, photoDisplayUrl };
+        const viewedAt = device.lastScanViewedAt;
+        let newScanCount = 0;
+        for (const scan of device.scans ?? []) {
+          if (!viewedAt || scan.createdAt > viewedAt) {
+            newScanCount += 1;
+          }
+        }
+
+        const { scans, ...deviceWithoutScans } = device;
+        return { ...deviceWithoutScans, photoDisplayUrl, newScanCount };
       })
     );
 

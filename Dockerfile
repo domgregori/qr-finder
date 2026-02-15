@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:20 AS base
 ARG APP_DIR=apps/admin
 WORKDIR /apps
 
@@ -12,7 +12,11 @@ COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/admin-public-combined/package.json ./packages/admin-public-combined/package.json
 COPY prisma ./prisma/
 
-RUN npm ci
+RUN npm config set fetch-retries 10 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm install --include=dev --no-audit --no-fund \
+    && test -x node_modules/.bin/next
 
 FROM base AS builder
 ARG APP_DIR=apps/admin
@@ -23,10 +27,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_MODE=standalone
 ENV NEXT_FONT_GOOGLE_DOWNLOAD=0
 
-RUN npx prisma generate
 RUN npm --workspace ${APP_DIR} run build
 
-FROM node:20-alpine AS runner
+FROM node:20 AS runner
 ARG APP_DIR=apps/admin
 WORKDIR /apps
 

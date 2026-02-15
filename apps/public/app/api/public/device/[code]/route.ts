@@ -77,6 +77,14 @@ export async function GET(
 
     // Notify admin app to send Apprise notifications (keeps endpoints private)
     if (!hasScanCookie) {
+      try {
+        await prisma.deviceScan.create({
+          data: { deviceId: device.id }
+        });
+      } catch (e) {
+        console.error("Failed to persist device scan:", e);
+      }
+
       const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
       const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
       if (internalSecret) {

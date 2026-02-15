@@ -7,7 +7,7 @@ import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import {
   MapPin, Plus, Smartphone, MessageCircle, QrCode, Settings,
-  Trash2, LogOut, ExternalLink, Search, AlertCircle, Bell
+  Trash2, LogOut, ExternalLink, Search, AlertCircle, Bell, Printer
 } from "lucide-react";
 import { ThemeToggle } from "@shared/components/theme-toggle";
 
@@ -19,7 +19,8 @@ interface Device {
   photoDisplayUrl?: string | null;
   uniqueCode: string;
   createdAt: string;
-  _count: { messages: number };
+  newScanCount?: number;
+  _count: { messages: number; scans: number };
 }
 
 export default function DashboardPage() {
@@ -191,12 +192,20 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Devices</h1>
             <p className="text-gray-600 dark:text-gray-400">Manage your tracked devices and QR codes</p>
           </div>
-          <Link
-            href="/dashboard/devices/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            <Plus size={18} /> Add Device
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard/print"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+            >
+              <Printer size={18} /> Print Sheet
+            </Link>
+            <Link
+              href="/dashboard/devices/new"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              <Plus size={18} /> Add Device
+            </Link>
+          </div>
         </div>
 
         {/* Search */}
@@ -248,7 +257,23 @@ export default function DashboardPage() {
                         </div>
                       )}
                       <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white">{device?.name ?? ""}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">{device?.name ?? ""}</h3>
+                          <span
+                            className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-xs font-semibold ${
+                              (device?.newScanCount ?? 0) > 0
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                                : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                            }`}
+                            title={
+                              (device?.newScanCount ?? 0) > 0
+                                ? `${device?.newScanCount ?? 0} new scan(s)`
+                                : "No new scans"
+                            }
+                          >
+                            {device?._count?.scans ?? 0}
+                          </span>
+                        </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Code: {device?.uniqueCode ?? ""}</p>
                       </div>
                     </div>
@@ -269,6 +294,8 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
                     <MessageCircle size={14} />
                     <span>{device?._count?.messages ?? 0} messages</span>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <span>{device?._count?.scans ?? 0} scans</span>
                   </div>
 
                   <div className="flex gap-2">

@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
 import { Download, Settings, Palette, Type, Maximize2, Sparkles, Frame, Image as ImageIcon, Square, Circle } from "lucide-react";
 import { toast } from "sonner";
+import { generateStyledQrDataUrl } from "@shared/lib/qr-render";
 
 interface QRCodeGeneratorProps {
   url: string;
@@ -23,6 +24,8 @@ export type QrSettings = {
   accentColor: string;
   overlayText: string;
   secondaryText: string;
+  primaryTextScale: number;
+  secondaryTextScale: number;
   includeLabel: boolean;
   qrLevel: "L" | "M" | "Q" | "H";
   activeTheme: string | null;
@@ -188,6 +191,8 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
   const [accentColor, setAccentColor] = useState("#000000");
   const [overlayText, setOverlayText] = useState("");
   const [secondaryText, setSecondaryText] = useState("");
+  const [primaryTextScale, setPrimaryTextScale] = useState(1);
+  const [secondaryTextScale, setSecondaryTextScale] = useState(1);
   const [includeLabel, setIncludeLabel] = useState(true);
   const [qrLevel, setQrLevel] = useState<"L" | "M" | "Q" | "H">("H");
   const [mounted, setMounted] = useState(false);
@@ -255,6 +260,8 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     if (initialSettings.accentColor) setAccentColor(initialSettings.accentColor);
     if (initialSettings.overlayText !== undefined) setOverlayText(initialSettings.overlayText);
     if (initialSettings.secondaryText !== undefined) setSecondaryText(initialSettings.secondaryText);
+    if (initialSettings.primaryTextScale !== undefined) setPrimaryTextScale(initialSettings.primaryTextScale);
+    if (initialSettings.secondaryTextScale !== undefined) setSecondaryTextScale(initialSettings.secondaryTextScale);
     if (initialSettings.includeLabel !== undefined) setIncludeLabel(initialSettings.includeLabel);
     if (initialSettings.qrLevel) setQrLevel(initialSettings.qrLevel);
     if (initialSettings.activeTheme !== undefined) setActiveTheme(initialSettings.activeTheme);
@@ -305,6 +312,8 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     accentColor,
     overlayText,
     secondaryText,
+    primaryTextScale,
+    secondaryTextScale,
     includeLabel,
     qrLevel,
     activeTheme,
@@ -331,6 +340,8 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     accentColor,
     overlayText,
     secondaryText,
+    primaryTextScale,
+    secondaryTextScale,
     includeLabel,
     qrLevel,
     activeTheme,
@@ -683,6 +694,8 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     if (settings.accentColor) setAccentColor(settings.accentColor);
     if (settings.overlayText !== undefined) setOverlayText(settings.overlayText);
     if (settings.secondaryText !== undefined) setSecondaryText(settings.secondaryText);
+    if (settings.primaryTextScale !== undefined) setPrimaryTextScale(settings.primaryTextScale);
+    if (settings.secondaryTextScale !== undefined) setSecondaryTextScale(settings.secondaryTextScale);
     if (settings.includeLabel !== undefined) setIncludeLabel(settings.includeLabel);
     if (settings.qrLevel) setQrLevel(settings.qrLevel);
     if (settings.frameStyle) setFrameStyle(settings.frameStyle);
@@ -770,6 +783,8 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     : centerPreviewFontSize;
   const centerPreviewBgWidth = centerPreviewTextWidth + centerPaddingH * 2;
   const centerPreviewBgHeight = centerPreviewFontSize + centerPaddingV * 2;
+  const primaryTextFontSize = Math.max(12, size / 18) * primaryTextScale;
+  const secondaryTextFontSize = Math.max(10, size / 20) * secondaryTextScale;
 
   // Get center background border radius based on shape
   const getCenterBgRadius = (baseSize: number) => {
@@ -799,165 +814,22 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     ctx.fill();
   }
 
-  const downloadImage = () => {
-    const qrCanvas = qrCanvasRef.current;
-    if (!qrCanvas) return;
+  const downloadImage = async () => {
+    try {
+      const dataUrl = await generateStyledQrDataUrl({
+        url,
+        deviceName,
+        settings: currentSettings,
+      });
 
-    // Create a new canvas with the full design
-    const exportQrSize = 1024;
-    const padding = 40;
-    const textHeight = (includeLabel ? 30 : 0) + (overlayText ? 20 : 0) + (secondaryText ? 18 : 0);
-    const totalWidth = exportQrSize + padding * 2;
-    const totalHeight = exportQrSize + padding * 2 + textHeight;
-
-    const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = totalWidth;
-    exportCanvas.height = totalHeight;
-    const ctx = exportCanvas.getContext("2d");
-    if (!ctx) return;
-
-    // Export background (outside QR)
-    if (exportBackground === "white") {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, totalWidth, totalHeight);
-    } else {
-      ctx.clearRect(0, 0, totalWidth, totalHeight);
+      const link = document.createElement("a");
+      link.download = `${deviceName.replace(/\s+/g, "_")}_qr.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error("Download image error:", error);
+      toast.error("Failed to generate PNG");
     }
-
-    // QR background (only the QR area, not the full canvas)
-    if (showGradientBg) {
-      const gradient = ctx.createLinearGradient(padding, padding, padding + exportQrSize, padding + exportQrSize);
-      gradient.addColorStop(0, bgColor);
-      gradient.addColorStop(1, lightenColor(bgColor, 20));
-      ctx.fillStyle = gradient;
-    } else {
-      ctx.fillStyle = bgColor;
-    }
-    ctx.fillRect(padding, padding, exportQrSize, exportQrSize);
-
-    const frameRadius = frameStyle === "rounded" || (frameStyle === "shadow" && shadowRounded) ? 24 : 12;
-    const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
-      const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + w - radius, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-      ctx.lineTo(x + w, y + h - radius);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-      ctx.lineTo(x + radius, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.closePath();
-    };
-
-    // Frame
-    if (frameStyle !== "none") {
-      ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 3;
-      const frameMargin = 10;
-      
-      switch (frameStyle) {
-        case "simple":
-        case "rounded":
-          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, frameStyle === "rounded" ? frameRadius : 0);
-          ctx.stroke();
-          break;
-        case "double":
-          ctx.lineWidth = 2;
-          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, frameRadius);
-          ctx.stroke();
-          drawRoundedRect(ctx, frameMargin + 5, frameMargin + 5, totalWidth - frameMargin * 2 - 10, totalHeight - frameMargin * 2 - 10, Math.max(0, frameRadius - 5));
-          ctx.stroke();
-          break;
-        case "dashed":
-          ctx.setLineDash([8, 4]);
-          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, frameRadius);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          break;
-        case "shadow":
-          ctx.fillStyle = accentColor;
-          drawRoundedRect(ctx, frameMargin + shadowDepth, frameMargin + shadowDepth, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, shadowRounded ? frameRadius : 0);
-          ctx.fill();
-          ctx.fillStyle = bgColor;
-          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, shadowRounded ? frameRadius : 0);
-          ctx.fill();
-          drawRoundedRect(ctx, frameMargin, frameMargin, totalWidth - frameMargin * 2, totalHeight - frameMargin * 2, shadowRounded ? frameRadius : 0);
-          ctx.stroke();
-          break;
-        case "corners":
-          const cl = 20;
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          // Top-left
-          ctx.moveTo(frameMargin, frameMargin + cl); ctx.lineTo(frameMargin, frameMargin); ctx.lineTo(frameMargin + cl, frameMargin);
-          // Top-right
-          ctx.moveTo(totalWidth - frameMargin - cl, frameMargin); ctx.lineTo(totalWidth - frameMargin, frameMargin); ctx.lineTo(totalWidth - frameMargin, frameMargin + cl);
-          // Bottom-left
-          ctx.moveTo(frameMargin, totalHeight - frameMargin - cl); ctx.lineTo(frameMargin, totalHeight - frameMargin); ctx.lineTo(frameMargin + cl, totalHeight - frameMargin);
-          // Bottom-right
-          ctx.moveTo(totalWidth - frameMargin - cl, totalHeight - frameMargin); ctx.lineTo(totalWidth - frameMargin, totalHeight - frameMargin); ctx.lineTo(totalWidth - frameMargin, totalHeight - frameMargin - cl);
-          ctx.stroke();
-          break;
-      }
-    }
-
-    // Draw QR code
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(qrCanvas, padding, padding, exportQrSize, exportQrSize);
-
-    // Center content (icon or custom text)
-    if (hasCenterContent) {
-      const isCustomText = centerIcon === "custom";
-      const fontSize = isCustomText
-        ? Math.max(8, Math.min(exportQrSize / 6, (exportQrSize / 4) / Math.max(1, centerContent.length / 3)) * centerTextSize)
-        : exportQrSize / 5;
-      ctx.font = isCustomText ? `bold ${fontSize}px sans-serif` : `${fontSize}px serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      // Background with custom shape
-      ctx.fillStyle = bgColor;
-      const textWidth = ctx.measureText(centerContent).width;
-      const textHeight = fontSize;
-      const bgWidth = textWidth + centerPaddingH * 2;
-      const bgHeight = textHeight + centerPaddingV * 2;
-      
-      drawCenterBackground(ctx, padding + exportQrSize / 2, padding + exportQrSize / 2, bgWidth, bgHeight, centerBgShape);
-      
-      const centerContentColor = isCustomText ? centerTextColor : fgColor;
-      ctx.fillStyle = centerContentColor;
-      ctx.fillText(centerContent, padding + exportQrSize / 2, padding + exportQrSize / 2 + 2);
-    }
-
-    // Text
-    let textY = padding + exportQrSize + 25;
-    ctx.textAlign = "center";
-
-    if (includeLabel) {
-      ctx.font = "bold 16px sans-serif";
-      ctx.fillStyle = fgColor;
-      ctx.fillText(deviceName, totalWidth / 2, textY);
-      textY += 22;
-    }
-
-    if (overlayText) {
-      ctx.font = "14px sans-serif";
-      ctx.fillStyle = accentColor;
-      ctx.fillText(overlayText, totalWidth / 2, textY);
-      textY += 18;
-    }
-
-    if (secondaryText) {
-      ctx.font = "12px sans-serif";
-      ctx.fillStyle = fgColor;
-      ctx.fillText(secondaryText, totalWidth / 2, textY);
-    }
-
-    const link = document.createElement("a");
-    link.download = `${deviceName.replace(/\s+/g, "_")}_qr.png`;
-    link.href = exportCanvas.toDataURL("image/png");
-    link.click();
   };
 
   const saveTheme = async () => {
@@ -1070,7 +942,7 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               {overlayText && (
                 <p
                   className="text-center mt-1 font-medium"
-                  style={{ color: accentColor, fontSize: Math.max(12, size / 18) }}
+                  style={{ color: accentColor, fontSize: primaryTextFontSize }}
                 >
                   {overlayText}
                 </p>
@@ -1078,7 +950,7 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               {secondaryText && (
                 <p
                   className="text-center mt-1"
-                  style={{ color: fgColor, fontSize: Math.max(10, size / 20), opacity: 0.8 }}
+                  style={{ color: fgColor, fontSize: secondaryTextFontSize, opacity: 0.8 }}
                 >
                   {secondaryText}
                 </p>
@@ -1635,6 +1507,40 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
               placeholder="e.g., Reward offered • No questions asked"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white placeholder-gray-400"
             />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
+              Primary Text Size
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0.6"
+                max="2.0"
+                step="0.05"
+                value={primaryTextScale}
+                onChange={(e) => setPrimaryTextScale(Number(e.target.value))}
+                className="flex-1 accent-orange-500"
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-10">{primaryTextScale.toFixed(2)}x</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
+              Secondary Text Size
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0.6"
+                max="2.0"
+                step="0.05"
+                value={secondaryTextScale}
+                onChange={(e) => setSecondaryTextScale(Number(e.target.value))}
+                className="flex-1 accent-orange-500"
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-10">{secondaryTextScale.toFixed(2)}x</span>
+            </div>
           </div>
         </div>
 

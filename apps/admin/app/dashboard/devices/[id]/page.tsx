@@ -20,6 +20,11 @@ interface Message {
   createdAt: string;
 }
 
+interface DeviceScan {
+  id: string;
+  createdAt: string;
+}
+
 interface Device {
   id: string;
   name: string;
@@ -33,6 +38,8 @@ interface Device {
   uniqueCode: string;
   createdAt: string;
   messages: Message[];
+  scans: DeviceScan[];
+  newScanCount?: number;
 }
 
 interface AppriseEndpoint {
@@ -90,6 +97,15 @@ export default function DeviceDetailPage() {
     }
   }, [status, id]);
 
+  const markScansViewed = async () => {
+    try {
+      await fetch(`/api/devices/${id}/scans/viewed`, { method: "POST" });
+      setDevice((prev) => (prev ? { ...prev, newScanCount: 0 } : prev));
+    } catch (err) {
+      console.error("Failed to mark scans viewed:", err);
+    }
+  };
+
   const fetchAppriseEndpoints = async () => {
     try {
       const res = await fetch("/api/apprise");
@@ -111,8 +127,10 @@ export default function DeviceDetailPage() {
         const res = await fetch(`/api/devices/${id}`);
         if (res.ok) {
           const data = await res.json();
-          // Only update if there are new messages
-          if (data.messages.length > device.messages.length) {
+          const hasNewMessages = data.messages.length > device.messages.length;
+          const hasScanChanges = data.scans.length !== (device.scans?.length ?? 0);
+
+          if (hasNewMessages || hasScanChanges) {
             // Find new messages that aren't owner replies (finder messages)
             const newFinderMessages = data.messages.slice(device.messages.length).filter(
               (msg: Message) => !msg.isOwnerReply
@@ -128,6 +146,9 @@ export default function DeviceDetailPage() {
             });
             
             setDevice(data);
+            if ((data.newScanCount ?? 0) > 0) {
+              void markScansViewed();
+            }
             setTimeout(() => {
               messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, 100);
@@ -161,6 +182,9 @@ export default function DeviceDetailPage() {
         setEditPhotoDisplayUrl(data?.photoDisplayUrl ?? null);
         setEditIsPublicPhoto(typeof data?.isPublicPhoto === "boolean" ? data.isPublicPhoto : true);
         setRemovePhoto(false);
+        if ((data?.newScanCount ?? 0) > 0) {
+          void markScansViewed();
+        }
       } else {
         router.push("/dashboard");
       }
@@ -748,6 +772,34 @@ export default function DeviceDetailPage() {
                   </button>
                 </div>
               </form>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden mt-6">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <QrCode size={18} />
+                  QR Scan History ({device?.scans?.length ?? 0})
+                </h2>
+              </div>
+              <div className="max-h-56 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
+                {(device?.scans?.length ?? 0) === 0 ? (
+                  <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                    <p>No scans yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(device?.scans ?? []).map((scan) => (
+                      <div
+                        key={scan.id}
+                        className="flex items-center gap-2 rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 shadow-sm"
+                      >
+                        <Clock size={14} className="text-gray-500 dark:text-gray-400" />
+                        <span>{formatDate(scan.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
