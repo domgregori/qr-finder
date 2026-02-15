@@ -10,6 +10,7 @@ import {
   Send, User, Clock, AlertCircle, Save, Trash2, RotateCcw,
   RefreshCw, ShieldAlert, X, Bell
 } from "lucide-react";
+import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface Message {
   id: string;
@@ -436,12 +437,15 @@ export default function DeviceDetailPage() {
                 <span className="font-bold text-gray-900 dark:text-white">{device?.name ?? ""}</span>
               </div>
             </div>
-            <Link
-              href={`/dashboard/devices/${id}/qr`}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors font-medium"
-            >
-              <QrCode size={18} /> QR Code
-            </Link>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <Link
+                href={`/dashboard/devices/${id}/qr`}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors font-medium"
+              >
+                <QrCode size={18} /> QR Code
+              </Link>
+            </div>
           </div>
         </div>
       </header>

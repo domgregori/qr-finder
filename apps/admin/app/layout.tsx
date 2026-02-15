@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@shared/components/providers";
-import { ThemeToggle } from "@shared/components/theme-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -33,11 +32,6 @@ export default function RootLayout({
       </head>
       <body className="font-sans" suppressHydrationWarning>
         <Providers>
-          <div className="sticky top-0 z-40 border-b border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 backdrop-blur">
-            <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-end">
-              <ThemeToggle />
-            </div>
-          </div>
           {children}
         </Providers>
       </body>

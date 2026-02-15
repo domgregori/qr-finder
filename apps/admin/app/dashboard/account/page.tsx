@@ -7,6 +7,7 @@ import Link from "next/link";
 import { MapPin, LogOut } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import Image from "next/image";
+import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface Theme {
   id: string;
@@ -269,6 +270,7 @@ export default function AccountPage() {
               <span className="font-bold text-gray-900 dark:text-white">Lost & Found</span>
             </Link>
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               <details className="relative">
                 <summary className="list-none cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
                   {session?.user?.email ?? ""}

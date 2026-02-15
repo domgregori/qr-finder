@@ -8,6 +8,7 @@ import {
   CheckCircle, Smartphone, AlertTriangle
 } from "lucide-react";
 import { Turnstile } from "@shared/components/turnstile";
+import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface Message {
   id: string;
@@ -75,7 +76,7 @@ export default function PublicDevicePage() {
       formError: "Please enter your name and message",
       aboutOwner: "About the owner",
       privacy:
-        "Your message and name will be visible to the device owner. Do not share sensitive personal information."
+        ""
     },
     es: {
       header: "Objetos Perdidos",
@@ -99,7 +100,7 @@ export default function PublicDevicePage() {
       formError: "Por favor ingresa tu nombre y mensaje",
       aboutOwner: "Sobre el propietario",
       privacy:
-        "Tu mensaje y nombre serán visibles para el dueño del dispositivo. No compartas información personal sensible."
+        ""
     }
   } as const;
 
@@ -275,6 +276,7 @@ export default function PublicDevicePage() {
               <span className="font-bold text-gray-900 dark:text-white">{t.header}</span>
             </div>
             <div className="flex items-center gap-2">
+              <ThemeToggle />
               <button
                 type="button"
                 onClick={() => setLanguage("en")}

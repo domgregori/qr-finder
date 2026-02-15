@@ -8,6 +8,7 @@ import {
   MapPin, ArrowLeft, Smartphone, Type, FileText, Bell,
   Image as ImageIcon, Upload, Check, AlertCircle, Plus
 } from "lucide-react";
+import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface AppriseEndpoint {
   id: string;
@@ -194,17 +195,20 @@ export default function NewDevicePage() {
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-3xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
-            </Link>
-            <div className="flex items-center gap-2">
-              <MapPin size={24} className="text-orange-500" />
-              <span className="font-bold text-gray-900 dark:text-white">Add New Device</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
+              </Link>
+              <div className="flex items-center gap-2">
+                <MapPin size={24} className="text-orange-500" />
+                <span className="font-bold text-gray-900 dark:text-white">Add New Device</span>
+              </div>
             </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>

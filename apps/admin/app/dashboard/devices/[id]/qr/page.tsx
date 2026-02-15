@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { MapPin, ArrowLeft, ExternalLink, Copy, Check, Globe } from "lucide-react";
 import { QRCodeGenerator, QrSettings } from "@shared/components/qr-code-generator";
+import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface Device {
   id: string;
@@ -140,6 +141,7 @@ export default function DeviceQRPage() {
                 <span className="font-bold text-gray-900 dark:text-white">QR Code for {device?.name ?? ""}</span>
               </div>
             </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
