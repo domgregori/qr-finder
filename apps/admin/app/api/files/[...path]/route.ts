@@ -16,10 +16,24 @@ const MIME_TYPES: Record<string, string> = {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path?: string[] }> | { path?: string[] } }
 ) {
   try {
-    const filePath = params.path.join("/");
+    const resolvedParams = await params;
+    const pathSegments = resolvedParams?.path;
+    if (!Array.isArray(pathSegments) || pathSegments.length === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const filePath = pathSegments
+      .map((segment) => {
+        try {
+          return decodeURIComponent(segment);
+        } catch {
+          return segment;
+        }
+      })
+      .join("/");
     
     // Security: Only allow files from uploads directory
     if (!filePath.startsWith("uploads/")) {

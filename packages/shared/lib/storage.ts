@@ -67,8 +67,12 @@ export async function getFileUrl(
   isPublic: boolean = true
 ): Promise<string> {
   if (isLocalStorage() || storagePath.startsWith("uploads/")) {
-    // Return relative URL for local files
-    return `/api/files/${encodeURIComponent(storagePath)}`;
+    // Preserve path separators in catch-all route while safely encoding segments
+    const encodedPath = storagePath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    return `/api/files/${encodedPath}`;
   }
 
   // Use S3 storage

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   req: Request,
-  { params }: { params: { code: string } }
+  { params }: { params: Promise<{ code?: string }> | { code?: string } }
 ) {
   // Rate limit check
   const clientIp = getClientIp(req);
@@ -18,6 +18,9 @@ export async function POST(
   }
 
   try {
+    const resolvedParams = await params;
+    const code = resolvedParams?.code ?? "";
+
     const body = await req.json();
     const { nickname: rawNickname, message: rawMessage, turnstileToken } = body ?? {};
     
@@ -53,7 +56,7 @@ export async function POST(
     }
 
     const device = await prisma.device.findUnique({
-      where: { uniqueCode: params?.code ?? "" }
+      where: { uniqueCode: code }
     });
 
     if (!device) {

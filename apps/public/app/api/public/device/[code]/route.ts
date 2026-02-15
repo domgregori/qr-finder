@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { code: string } }
+  { params }: { params: Promise<{ code?: string }> | { code?: string } }
 ) {
   // Rate limit check
   const clientIp = getClientIp(req);
@@ -18,8 +18,11 @@ export async function GET(
   }
 
   try {
+    const resolvedParams = await params;
+    const code = resolvedParams?.code ?? "";
+
     const device = await prisma.device.findUnique({
-      where: { uniqueCode: params?.code ?? "" },
+      where: { uniqueCode: code },
       include: {
         messages: {
           orderBy: { createdAt: "asc" }
@@ -36,6 +39,9 @@ export async function GET(
     if (device?.photoUrl) {
       try {
         photoDisplayUrl = await getFileUrl(device.photoUrl, device.isPublicPhoto);
+        if (photoDisplayUrl.startsWith("/api/files/")) {
+          photoDisplayUrl = `/api/public/device/${encodeURIComponent(code)}/photo`;
+        }
       } catch (e) {
         console.error("Failed to get photo URL:", e);
       }

@@ -9,16 +9,19 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const device = await prisma.device.findUnique({
-      where: { id: params?.id ?? "" },
+      where: { id },
       include: {
         messages: {
           orderBy: { createdAt: "asc" }
@@ -51,9 +54,12 @@ export async function GET(
 
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -85,7 +91,7 @@ export async function PUT(
       : undefined;
 
     const existing = await prisma.device.findUnique({
-      where: { id: params?.id ?? "" },
+      where: { id },
       select: { photoUrl: true, isPublicPhoto: true }
     });
 
@@ -101,7 +107,7 @@ export async function PUT(
     }
 
     const device = await prisma.device.update({
-      where: { id: params?.id ?? "" },
+      where: { id },
       data: {
         name,
         description,
@@ -126,16 +132,19 @@ export async function PUT(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const device = await prisma.device.findUnique({
-      where: { id: params?.id ?? "" }
+      where: { id }
     });
 
     if (!device) {
@@ -152,7 +161,7 @@ export async function DELETE(
     }
 
     await prisma.device.delete({
-      where: { id: params?.id ?? "" }
+      where: { id }
     });
 
     return NextResponse.json({ success: true });

@@ -10,16 +10,19 @@ const generateCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const device = await prisma.device.findUnique({
-      where: { id: params?.id ?? "" }
+      where: { id }
     });
 
     if (!device) {
@@ -43,24 +46,24 @@ export async function POST(
       // Delete all messages and update code in a transaction
       await prisma.$transaction([
         prisma.message.deleteMany({
-          where: { deviceId: params.id }
+          where: { deviceId: id }
         }),
         prisma.device.update({
-          where: { id: params.id },
+          where: { id },
           data: { uniqueCode: newCode }
         })
       ]);
     } else {
       // Just update the code
       await prisma.device.update({
-        where: { id: params.id },
+        where: { id },
         data: { uniqueCode: newCode }
       });
     }
 
     // Fetch and return the updated device with messages
     const updatedDevice = await prisma.device.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         messages: {
           orderBy: { createdAt: "asc" }

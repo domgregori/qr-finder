@@ -290,7 +290,11 @@ export default function DeviceDetailPage() {
 
         const { cloud_storage_path: localPath } = await uploadRes.json();
         setEditPhotoUrl(localPath);
-        setEditPhotoDisplayUrl(`/api/files/${encodeURIComponent(localPath)}`);
+        const encodedPath = localPath
+          .split("/")
+          .map((segment: string) => encodeURIComponent(segment))
+          .join("/");
+        setEditPhotoDisplayUrl(`/api/files/${encodedPath}`);
       } else {
         const urlParams = new URL(uploadUrl).searchParams;
         const signedHeaders = urlParams?.get?.("X-Amz-SignedHeaders") ?? "";

@@ -8,11 +8,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const messages = await prisma.message.findMany({
-      where: { deviceId: params?.id ?? "" },
+      where: { deviceId: id },
       orderBy: { createdAt: "asc" }
     });
 
@@ -29,16 +32,19 @@ export async function GET(
 // DELETE - Clear all messages for a device
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const device = await prisma.device.findUnique({
-      where: { id: params?.id ?? "" }
+      where: { id }
     });
 
     if (!device) {
@@ -46,7 +52,7 @@ export async function DELETE(
     }
 
     await prisma.message.deleteMany({
-      where: { deviceId: params?.id ?? "" }
+      where: { deviceId: id }
     });
 
     return NextResponse.json({ success: true, message: "All messages cleared" });
@@ -61,9 +67,12 @@ export async function DELETE(
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id?: string }> | { id?: string } }
 ) {
   try {
+    const resolvedParams = await params;
+    const id = resolvedParams?.id ?? "";
+
     const session = await getServerSession(authOptions);
     const body = await req.json();
     const { nickname: rawNickname, message: rawMessage, turnstileToken } = body ?? {};
@@ -102,7 +111,7 @@ export async function POST(
     }
 
     const device = await prisma.device.findUnique({
-      where: { id: params?.id ?? "" }
+      where: { id }
     });
 
     if (!device) {
@@ -111,7 +120,7 @@ export async function POST(
 
     const newMessage = await prisma.message.create({
       data: {
-        deviceId: params?.id ?? "",
+        deviceId: id,
         nickname,
         message,
         isOwnerReply: !!session
