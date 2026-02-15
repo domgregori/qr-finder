@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
   const prevMessageCountsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -43,6 +44,19 @@ export default function DashboardPage() {
       fetchDevices();
     }
   }, [status]);
+
+  useEffect(() => {
+    if (!activeImageUrl) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveImageUrl(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeImageUrl]);
 
   // Polling for new messages across all devices
   useEffect(() => {
@@ -244,12 +258,21 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       {device?.photoDisplayUrl ? (
-                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                          <img
-                            src={device.photoDisplayUrl}
-                            alt={device?.name ?? "Device"}
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="group relative">
+                          <button
+                            type="button"
+                            onClick={() => setActiveImageUrl(device.photoDisplayUrl ?? null)}
+                            className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <img
+                              src={device.photoDisplayUrl}
+                              alt={device?.name ?? "Device"}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                          <div className="pointer-events-none absolute left-0 top-11 z-20 hidden w-40 rounded-lg border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-800 md:block md:opacity-0 md:group-hover:opacity-100 md:transition-opacity">
+                            <img src={device.photoDisplayUrl} alt={`${device?.name ?? "Device"} preview`} className="h-28 w-full rounded-md object-cover" />
+                          </div>
                         </div>
                       ) : (
                         <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
@@ -319,6 +342,28 @@ export default function DashboardPage() {
         )}
 
       </main>
+
+      {activeImageUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setActiveImageUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveImageUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-white"
+            aria-label="Close image preview"
+          >
+            Close
+          </button>
+          <img
+            src={activeImageUrl}
+            alt="Device full view"
+            className="max-h-[90vh] max-w-[95vw] rounded-xl object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteId && (

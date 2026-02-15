@@ -48,6 +48,7 @@ export default function PublicDevicePage() {
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState("");
   const [language, setLanguage] = useState<"en" | "es">("en");
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
 
   const turnstileSiteKey = typeof window !== "undefined" 
     ? (window as any).__TURNSTILE_SITE_KEY ?? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""
@@ -124,6 +125,19 @@ export default function PublicDevicePage() {
       fetchDevice();
     }
   }, [code]);
+
+  useEffect(() => {
+    if (!activeImageUrl) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveImageUrl(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeImageUrl]);
 
   // Real-time polling for new messages
   useEffect(() => {
@@ -431,13 +445,26 @@ export default function PublicDevicePage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mt-6">
           <div className="flex items-start gap-4">
             {device?.photoUrl ? (
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
-                <Image
-                  src={device.photoUrl}
-                  alt={device?.name ?? "Device"}
-                  fill
-                  className="object-cover"
-                />
+              <div className="group relative flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveImageUrl(device.photoUrl ?? null)}
+                  className="relative h-20 w-20 overflow-hidden rounded-xl bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+                >
+                  <Image
+                    src={device.photoUrl}
+                    alt={device?.name ?? "Device"}
+                    fill
+                    className="object-cover"
+                  />
+                </button>
+                <div className="pointer-events-none absolute left-0 top-24 z-20 hidden w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-800 md:block md:opacity-0 md:group-hover:opacity-100 md:transition-opacity">
+                  <img
+                    src={device.photoUrl}
+                    alt={`${device?.name ?? "Device"} preview`}
+                    className="h-32 w-full rounded-md object-cover"
+                  />
+                </div>
               </div>
             ) : (
               <div className="w-20 h-20 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
@@ -484,6 +511,28 @@ export default function PublicDevicePage() {
           {t.privacy}
         </p>
       </main>
+
+      {activeImageUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setActiveImageUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveImageUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-white"
+            aria-label="Close image preview"
+          >
+            Close
+          </button>
+          <img
+            src={activeImageUrl}
+            alt={`${device?.name ?? "Device"} full view`}
+            className="max-h-[90vh] max-w-[95vw] rounded-xl object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

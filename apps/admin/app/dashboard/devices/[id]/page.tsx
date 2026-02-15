@@ -83,6 +83,7 @@ export default function DeviceDetailPage() {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [clearMessagesOnRegenerate, setClearMessagesOnRegenerate] = useState(true);
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -96,6 +97,19 @@ export default function DeviceDetailPage() {
       fetchDevice();
     }
   }, [status, id]);
+
+  useEffect(() => {
+    if (!activeImageUrl) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveImageUrl(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeImageUrl]);
 
   const markScansViewed = async () => {
     try {
@@ -452,8 +466,17 @@ export default function DeviceDetailPage() {
               </Link>
               <div className="flex items-center gap-3">
                 {device?.photoDisplayUrl ? (
-                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
-                    <img src={device.photoDisplayUrl} alt={device?.name ?? "Device"} className="w-full h-full object-cover" />
+                  <div className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => setActiveImageUrl(device.photoDisplayUrl ?? null)}
+                      className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <img src={device.photoDisplayUrl} alt={device?.name ?? "Device"} className="w-full h-full object-cover" />
+                    </button>
+                    <div className="pointer-events-none absolute left-0 top-11 z-20 hidden w-40 rounded-lg border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-800 md:block md:opacity-0 md:group-hover:opacity-100 md:transition-opacity">
+                      <img src={device.photoDisplayUrl} alt={device?.name ?? "Device preview"} className="h-28 w-full rounded-md object-cover" />
+                    </div>
                   </div>
                 ) : (
                   <MapPin size={24} className="text-orange-500" />
@@ -545,8 +568,17 @@ export default function DeviceDetailPage() {
                       )}
                     </div>
                     {editPhotoDisplayUrl && (
-                      <div className="mt-3 w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
-                        <img src={editPhotoDisplayUrl} alt="Device" className="w-full h-40 object-contain" />
+                      <div className="group relative mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setActiveImageUrl(editPhotoDisplayUrl)}
+                          className="w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <img src={editPhotoDisplayUrl} alt="Device" className="w-full h-40 object-contain" />
+                        </button>
+                        <div className="pointer-events-none absolute right-2 top-2 rounded-md bg-black/65 px-2 py-1 text-xs text-white opacity-0 transition-opacity md:group-hover:opacity-100">
+                          Tap or click for full view
+                        </div>
                       </div>
                     )}
                     <div className="mt-2 flex items-center gap-2">
@@ -804,6 +836,28 @@ export default function DeviceDetailPage() {
           </div>
         </div>
       </main>
+
+      {activeImageUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setActiveImageUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveImageUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-gray-900 hover:bg-white"
+            aria-label="Close image preview"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={activeImageUrl}
+            alt={`${device?.name ?? "Device"} full view`}
+            className="max-h-[90vh] max-w-[95vw] rounded-xl object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Regenerate Code Modal */}
       {showRegenerateModal && (
