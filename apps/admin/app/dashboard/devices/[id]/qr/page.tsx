@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { MapPin, ArrowLeft, ExternalLink, Copy, Check, Globe } from "lucide-react";
+import { MapPin, ArrowLeft, ExternalLink, Copy, Check, Globe, QrCode, Palette } from "lucide-react";
 import { QRCodeGenerator, QrSettings } from "@shared/components/qr-code-generator";
 import { ThemeToggle } from "@shared/components/theme-toggle";
 
@@ -124,10 +124,10 @@ export default function DeviceQRPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-orange-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-3xl mx-auto px-6 py-4">
+        <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -138,7 +138,7 @@ export default function DeviceQRPage() {
               </Link>
               <div className="flex items-center gap-2">
                 <MapPin size={24} className="text-orange-500" />
-                <span className="font-bold text-gray-900 dark:text-white">QR Code for {device?.name ?? ""}</span>
+                <span className="font-bold text-gray-900 dark:text-white">QR Studio for {device?.name ?? ""}</span>
               </div>
             </div>
             <ThemeToggle />
@@ -147,70 +147,72 @@ export default function DeviceQRPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-3xl mx-auto px-6 py-8">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 md:p-8">
-          {/* Public Portal Notice */}
-          {isUsingPublicPortal && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <div className="flex items-center gap-2 text-green-800 dark:text-green-300">
-                <Globe size={18} />
-                <span className="text-sm font-medium">QR code points to separate public portal</span>
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="space-y-6">
+            <div className="rounded-2xl border border-gray-200 bg-white/90 p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800/80">
+              <div className="flex items-center gap-2">
+                <QrCode size={18} className="text-orange-500" />
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Device QR Link</h2>
               </div>
-              <p className="text-xs text-green-700 dark:text-green-400 mt-1 ml-6">
-                {publicPortalUrl}
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                This is the URL encoded by the QR. Scanning always opens this address.
               </p>
-            </div>
-          )}
-
-          {/* URL Display */}
-          <div className="mb-6">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Public URL</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 break-all">
+              <div className="mt-4 rounded-lg bg-gray-100 p-3 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200 break-all">
                 {deviceUrl}
               </div>
-              <button
-                onClick={copyUrl}
-                className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                title="Copy URL"
-              >
-                {copied ? (
-                  <Check size={18} className="text-green-600 dark:text-green-400" />
-                ) : (
-                  <Copy size={18} className="text-gray-600 dark:text-gray-400" />
-                )}
-              </button>
-              <Link
-                href={deviceUrl}
-                target="_blank"
-                className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                title="Open in new tab"
-              >
-                <ExternalLink size={18} className="text-gray-600 dark:text-gray-400" />
-              </Link>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={copyUrl}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {copied ? <Check size={16} className="text-green-600 dark:text-green-400" /> : <Copy size={16} />}
+                  {copied ? "Copied" : "Copy"}
+                </button>
+                <Link
+                  href={deviceUrl}
+                  target="_blank"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  <ExternalLink size={16} /> Open
+                </Link>
+              </div>
             </div>
-          </div>
 
-          {/* QR Code Generator */}
-          {effectiveBaseUrl && (
-            <QRCodeGenerator
-              url={deviceUrl}
-              deviceName={device?.name ?? "Device"}
-              initialSettings={device?.qrSettings ?? null}
-              onSettingsChange={handleSettingsChange}
-            />
-          )}
-        </div>
+            {/* Public Portal Notice */}
+            {isUsingPublicPortal && (
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-5 dark:border-green-800 dark:bg-green-900/20">
+                <div className="flex items-center gap-2 text-green-800 dark:text-green-300">
+                  <Globe size={18} />
+                  <span className="text-sm font-medium">Using separate public portal</span>
+                </div>
+                <p className="mt-2 text-xs text-green-700 dark:text-green-400 break-all">{publicPortalUrl}</p>
+              </div>
+            )}
 
-        {/* Instructions */}
-        <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-3">How to use</h3>
-          <ol className="space-y-2 text-sm text-blue-800 dark:text-blue-200">
-            <li>1. Customize the QR code appearance using the options above</li>
-            <li>2. Download as PNG for easy printing on stickers or labels</li>
-            <li>3. Attach the QR code to your device</li>
-            <li>4. When someone scans it, you&apos;ll be notified and they can leave a message</li>
-          </ol>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-900/20">
+              <div className="flex items-center gap-2">
+                <Palette size={18} className="text-blue-700 dark:text-blue-300" />
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">SVG-first workflow</h3>
+              </div>
+              <ol className="mt-3 space-y-1.5 text-xs text-blue-800 dark:text-blue-200">
+                <li>1. Adjust style in the panel on the right.</li>
+                <li>2. Export SVG for best print quality.</li>
+                <li>3. Use PNG only when a raster image is required.</li>
+              </ol>
+            </div>
+          </aside>
+
+          <section className="rounded-2xl border border-gray-200 bg-white/90 p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800/80">
+            {effectiveBaseUrl && (
+              <QRCodeGenerator
+                url={deviceUrl}
+                deviceName={device?.name ?? "Device"}
+                initialSettings={device?.qrSettings ?? null}
+                onSettingsChange={handleSettingsChange}
+              />
+            )}
+          </section>
         </div>
       </main>
     </div>
