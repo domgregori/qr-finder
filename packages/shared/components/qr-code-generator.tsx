@@ -1,10 +1,9 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { Download, Settings, Palette, Type, Maximize2, Sparkles, Frame, Image as ImageIcon, Square, Circle } from "lucide-react";
+import { Check, Download, FileImage, FileType2, Palette, Save, Settings, Type } from "lucide-react";
 import { toast } from "sonner";
-import { generateStyledQrDataUrl } from "@shared/lib/qr-render";
 
 interface QRCodeGeneratorProps {
   url: string;
@@ -27,6 +26,12 @@ export type QrSettings = {
   primaryTextScale: number;
   secondaryTextScale: number;
   includeLabel: boolean;
+  labelPadding: number;
+  framePadding: number;
+  frameThickness: number;
+  frameRadius: number;
+  frameDash: number;
+  shadowColor: string;
   qrLevel: "L" | "M" | "Q" | "H";
   activeTheme: string | null;
   frameStyle: string;
@@ -47,213 +52,132 @@ export type QrSettings = {
   exportBackground: "white" | "transparent";
 };
 
-// Preset themes
-const THEMES = [
-  { name: "Classic", fg: "#000000", bg: "#ffffff", accent: "#000000" },
-  { name: "Ocean", fg: "#0077b6", bg: "#caf0f8", accent: "#023e8a" },
-  { name: "Forest", fg: "#2d6a4f", bg: "#d8f3dc", accent: "#1b4332" },
-  { name: "Sunset", fg: "#9d4edd", bg: "#ffc8dd", accent: "#c77dff" },
-  { name: "Midnight", fg: "#e0e0e0", bg: "#1a1a2e", accent: "#7b2cbf" },
-  { name: "Retro", fg: "#5f0f40", bg: "#fbf8cc", accent: "#9a031e" },
-  { name: "Neon", fg: "#39ff14", bg: "#0d0d0d", accent: "#ff00ff" },
-  { name: "Coral", fg: "#ff6b6b", bg: "#fff5f5", accent: "#ee5a5a" },
-  { name: "Ice", fg: "#1d4ed8", bg: "#e0f2fe", accent: "#38bdf8" },
-  { name: "Moss", fg: "#365314", bg: "#ecfccb", accent: "#84cc16" },
-  { name: "Desert", fg: "#7c2d12", bg: "#ffedd5", accent: "#fb923c" },
-  { name: "Slate", fg: "#0f172a", bg: "#e2e8f0", accent: "#64748b" },
-  { name: "Berry", fg: "#7f1d1d", bg: "#fee2e2", accent: "#ef4444" },
+type ThemePreset = {
+  name: string;
+  fgColor: string;
+  bgColor: string;
+  accentColor: string;
+};
+
+const THEME_PRESETS: ThemePreset[] = [
+  { name: "Classic", fgColor: "#111111", bgColor: "#ffffff", accentColor: "#111111" },
+  { name: "Ocean", fgColor: "#0077b6", bgColor: "#caf0f8", accentColor: "#023e8a" },
+  { name: "Forest", fgColor: "#1b4332", bgColor: "#d8f3dc", accentColor: "#2d6a4f" },
+  { name: "Warm", fgColor: "#7c2d12", bgColor: "#ffedd5", accentColor: "#ea580c" },
+  { name: "Slate", fgColor: "#0f172a", bgColor: "#e2e8f0", accentColor: "#334155" },
 ];
 
-// Frame styles
-const FRAMES = [
-  { id: "none", name: "None" },
-  { id: "simple", name: "Simple Border" },
-  { id: "rounded", name: "Rounded" },
-  { id: "double", name: "Double Line" },
-  { id: "dashed", name: "Dashed" },
-  { id: "shadow", name: "Shadow Box" },
-  { id: "gradient", name: "Gradient Border" },
-  { id: "corners", name: "Corner Brackets" },
-];
+const DEFAULT_SETTINGS: QrSettings = {
+  size: 320,
+  fgColor: "#111111",
+  bgColor: "#ffffff",
+  accentColor: "#111111",
+  overlayText: "",
+  secondaryText: "",
+  primaryTextScale: 1,
+  secondaryTextScale: 1,
+  includeLabel: true,
+  labelPadding: 8,
+  framePadding: 10,
+  frameThickness: 3,
+  frameRadius: 22,
+  frameDash: 8,
+  shadowColor: "#111111",
+  qrLevel: "H",
+  activeTheme: null,
+  frameStyle: "rounded",
+  centerIcon: "none",
+  centerText: "",
+  centerTextSize: 1,
+  centerTextColor: "#111111",
+  showGradientBg: false,
+  gradientAngle: 135,
+  dotShape: "square",
+  markerBorderShape: "square",
+  markerCenterShape: "square",
+  centerBgShape: "rounded",
+  centerPaddingH: 12,
+  centerPaddingV: 8,
+  shadowDepth: 8,
+  shadowRounded: false,
+  exportBackground: "white",
+};
 
-// QR module shapes (for data dots)
-const DOT_SHAPES = [
-  { id: "square", name: "Square", icon: "▪️" },
-  { id: "rounded", name: "Rounded", icon: "▫️" },
-  { id: "circle", name: "Circle", icon: "●" },
-];
+const escapeXml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 
-// Marker border shapes (outer ring of corner markers)
-const MARKER_BORDER_SHAPES = [
-  { id: "square", name: "Square", icon: "□" },
-  { id: "rounded", name: "Rounded", icon: "▢" },
-  { id: "circle", name: "Circle", icon: "○" },
-];
+const sanitizeFileName = (value: string) => {
+  const normalized = value.trim().replace(/\s+/g, "_");
+  return normalized.length > 0 ? normalized.replace(/[^a-zA-Z0-9_-]/g, "") : "device_qr";
+};
 
-// Marker center shapes (inner dot of corner markers)
-const MARKER_CENTER_SHAPES = [
-  { id: "square", name: "Square", icon: "■" },
-  { id: "circle", name: "Circle", icon: "●" },
-];
+export function QRCodeGenerator({
+  url,
+  deviceName,
+  initialSettings,
+  onSettingsChange,
+  showThemeSave = true,
+}: QRCodeGeneratorProps) {
+  const initializedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-// Center background shapes
-const CENTER_BG_SHAPES = [
-  { id: "circle", name: "Circle" },
-  { id: "rounded", name: "Rounded Square" },
-  { id: "square", name: "Square" },
-];
+  const [size, setSize] = useState(DEFAULT_SETTINGS.size);
+  const [fgColor, setFgColor] = useState(DEFAULT_SETTINGS.fgColor);
+  const [bgColor, setBgColor] = useState(DEFAULT_SETTINGS.bgColor);
+  const [accentColor, setAccentColor] = useState(DEFAULT_SETTINGS.accentColor);
+  const [overlayText, setOverlayText] = useState(DEFAULT_SETTINGS.overlayText);
+  const [secondaryText, setSecondaryText] = useState(DEFAULT_SETTINGS.secondaryText);
+  const [primaryTextScale, setPrimaryTextScale] = useState(DEFAULT_SETTINGS.primaryTextScale);
+  const [secondaryTextScale, setSecondaryTextScale] = useState(DEFAULT_SETTINGS.secondaryTextScale);
+  const [includeLabel, setIncludeLabel] = useState(DEFAULT_SETTINGS.includeLabel);
+  const [labelPadding, setLabelPadding] = useState(DEFAULT_SETTINGS.labelPadding);
+  const [framePadding, setFramePadding] = useState(DEFAULT_SETTINGS.framePadding);
+  const [frameThickness, setFrameThickness] = useState(DEFAULT_SETTINGS.frameThickness);
+  const [frameRadius, setFrameRadius] = useState(DEFAULT_SETTINGS.frameRadius);
+  const [frameDash, setFrameDash] = useState(DEFAULT_SETTINGS.frameDash);
+  const [shadowColor, setShadowColor] = useState(DEFAULT_SETTINGS.shadowColor);
+  const [shadowDepth, setShadowDepth] = useState(DEFAULT_SETTINGS.shadowDepth);
+  const [qrLevel, setQrLevel] = useState<"L" | "M" | "Q" | "H">(DEFAULT_SETTINGS.qrLevel);
+  const [frameStyle, setFrameStyle] = useState(DEFAULT_SETTINGS.frameStyle);
+  const [showGradientBg, setShowGradientBg] = useState(DEFAULT_SETTINGS.showGradientBg);
+  const [gradientAngle, setGradientAngle] = useState(DEFAULT_SETTINGS.gradientAngle);
+  const [centerText, setCenterText] = useState(DEFAULT_SETTINGS.centerText);
+  const [centerTextColor, setCenterTextColor] = useState(DEFAULT_SETTINGS.centerTextColor);
+  const [centerTextSize, setCenterTextSize] = useState(DEFAULT_SETTINGS.centerTextSize);
+  const [dotShape, setDotShape] = useState(DEFAULT_SETTINGS.dotShape);
+  const [markerBorderShape, setMarkerBorderShape] = useState(DEFAULT_SETTINGS.markerBorderShape);
+  const [markerCenterShape, setMarkerCenterShape] = useState(DEFAULT_SETTINGS.markerCenterShape);
+  const [exportBackground, setExportBackground] = useState<"white" | "transparent">(DEFAULT_SETTINGS.exportBackground);
+  const [activeTheme, setActiveTheme] = useState<string | null>(DEFAULT_SETTINGS.activeTheme);
 
-// Preview components for shape selectors
-function DotPreview({ shape }: { shape: string }) {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" className="fill-current">
-      {shape === "square" && (
-        <>
-          <rect x="2" y="2" width="7" height="7" />
-          <rect x="11" y="2" width="7" height="7" />
-          <rect x="2" y="11" width="7" height="7" />
-          <rect x="19" y="11" width="7" height="7" />
-          <rect x="11" y="19" width="7" height="7" />
-          <rect x="19" y="19" width="7" height="7" />
-        </>
-      )}
-      {shape === "rounded" && (
-        <>
-          {/* Connected flowing shape */}
-          <path d="M5 2 h5 q3 0 3 3 v5 q0 3 -3 3 h-5 q-3 0 -3 -3 v-5 q0 -3 3 -3 z" />
-          <path d="M18 11 h5 q3 0 3 3 v8 q0 3 -3 3 h-5 q-3 0 -3 -3 v-8 q0 -3 3 -3 z" />
-          <rect x="2" y="19" width="7" height="7" rx="2" />
-        </>
-      )}
-      {shape === "circle" && (
-        <>
-          <circle cx="5.5" cy="5.5" r="3.5" />
-          <circle cx="14" cy="5.5" r="3.5" />
-          <circle cx="5.5" cy="14" r="3.5" />
-          <circle cx="22.5" cy="14" r="3.5" />
-          <circle cx="14" cy="22.5" r="3.5" />
-          <circle cx="22.5" cy="22.5" r="3.5" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function MarkerBorderPreview({ shape }: { shape: string }) {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" className="fill-current">
-      {shape === "square" && (
-        <path d="M2 2h20v20H2V2zm3 3v14h14V5H5z" fillRule="evenodd" />
-      )}
-      {shape === "rounded" && (
-        <path d="M6 2C3.8 2 2 3.8 2 6v12c0 2.2 1.8 4 4 4h12c2.2 0 4-1.8 4-4V6c0-2.2-1.8-4-4-4H6zm0 3h12c.6 0 1 .4 1 1v12c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1V6c0-.6.4-1 1-1z" fillRule="evenodd" />
-      )}
-      {shape === "circle" && (
-        <>
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="7" className="fill-white dark:fill-gray-700" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function MarkerCenterPreview({ shape }: { shape: string }) {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" className="fill-current">
-      {shape === "square" && <rect x="5" y="5" width="14" height="14" />}
-      {shape === "circle" && <circle cx="12" cy="12" r="7" />}
-    </svg>
-  );
-}
-
-// Center icons/emojis
-const CENTER_ICONS = [
-  { id: "none", name: "None", emoji: "" },
-  { id: "custom", name: "✏️ Custom Text", emoji: "" },
-  { id: "pin", name: "📍 Location", emoji: "📍" },
-  { id: "phone", name: "📱 Phone", emoji: "📱" },
-  { id: "key", name: "🔑 Key", emoji: "🔑" },
-  { id: "bag", name: "👜 Bag", emoji: "👜" },
-  { id: "laptop", name: "💻 Laptop", emoji: "💻" },
-  { id: "wallet", name: "👛 Wallet", emoji: "👛" },
-  { id: "heart", name: "❤️ Heart", emoji: "❤️" },
-  { id: "star", name: "⭐ Star", emoji: "⭐" },
-  { id: "paw", name: "🐾 Pet", emoji: "🐾" },
-];
-
-export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsChange, showThemeSave = true, profileBlurb, profileAvatarUrl, profileAvatarShape }: QRCodeGeneratorProps) {
-  const qrRef = useRef<HTMLDivElement>(null);
-  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [size, setSize] = useState(200);
-  const [fgColor, setFgColor] = useState("#000000");
-  const [bgColor, setBgColor] = useState("#ffffff");
-  const [accentColor, setAccentColor] = useState("#000000");
-  const [overlayText, setOverlayText] = useState("");
-  const [secondaryText, setSecondaryText] = useState("");
-  const [primaryTextScale, setPrimaryTextScale] = useState(1);
-  const [secondaryTextScale, setSecondaryTextScale] = useState(1);
-  const [includeLabel, setIncludeLabel] = useState(true);
-  const [qrLevel, setQrLevel] = useState<"L" | "M" | "Q" | "H">("H");
-  const [mounted, setMounted] = useState(false);
-  const [activeTheme, setActiveTheme] = useState<string | null>(null);
-  const [frameStyle, setFrameStyle] = useState("none");
-  const [centerIcon, setCenterIcon] = useState("none");
-  const [centerText, setCenterText] = useState("");
-  const [showGradientBg, setShowGradientBg] = useState(false);
-  const [gradientAngle, setGradientAngle] = useState(135);
-  // New customization options
-  const [dotShape, setDotShape] = useState("rounded");
-  const [markerBorderShape, setMarkerBorderShape] = useState("rounded");
-  const [markerCenterShape, setMarkerCenterShape] = useState("circle");
-  const [centerBgShape, setCenterBgShape] = useState("circle");
-  const [centerPaddingH, setCenterPaddingH] = useState(8);
-  const [centerPaddingV, setCenterPaddingV] = useState(8);
-  const [centerTextSize, setCenterTextSize] = useState(1);
-  const [centerTextColor, setCenterTextColor] = useState("#000000");
-  const [centerTextColorLocked, setCenterTextColorLocked] = useState(true);
-  const [fgHex, setFgHex] = useState(fgColor);
-  const [bgHex, setBgHex] = useState(bgColor);
-  const [accentHex, setAccentHex] = useState(accentColor);
-  const [centerTextHex, setCenterTextHex] = useState(centerTextColor);
-  const [shadowDepth, setShadowDepth] = useState(8);
-  const [shadowRounded, setShadowRounded] = useState(false);
-  const [exportBackground, setExportBackground] = useState<"white" | "transparent">("white");
-  const [qrMatrix, setQrMatrix] = useState<boolean[][] | null>(null);
   const [customThemes, setCustomThemes] = useState<Array<{ id: string; name: string; settings: QrSettings }>>([]);
   const [themeName, setThemeName] = useState("");
   const [savingTheme, setSavingTheme] = useState(false);
-  const initializedRef = useRef(false);
-  const settingsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (centerTextColorLocked) {
-      setCenterTextColor(accentColor);
-    }
-  }, [accentColor, centerTextColorLocked]);
+  const [svgMarkup, setSvgMarkup] = useState("");
+  const [copiedSvg, setCopiedSvg] = useState(false);
+  const previousAccentRef = useRef(DEFAULT_SETTINGS.accentColor);
 
   useEffect(() => {
     const loadThemes = async () => {
       try {
         const res = await fetch("/api/qr-themes");
-        if (res.ok) {
-          const data = await res.json();
-          setCustomThemes(data ?? []);
-        }
+        if (!res.ok) return;
+        const data = await res.json();
+        setCustomThemes(data ?? []);
       } catch (error) {
         console.error("Failed to load themes:", error);
       }
     };
-    loadThemes();
+    void loadThemes();
   }, []);
 
   useEffect(() => {
     if (!initialSettings || initializedRef.current) return;
-
     if (initialSettings.size !== undefined) setSize(initialSettings.size);
     if (initialSettings.fgColor) setFgColor(initialSettings.fgColor);
     if (initialSettings.bgColor) setBgColor(initialSettings.bgColor);
@@ -263,1322 +187,752 @@ export function QRCodeGenerator({ url, deviceName, initialSettings, onSettingsCh
     if (initialSettings.primaryTextScale !== undefined) setPrimaryTextScale(initialSettings.primaryTextScale);
     if (initialSettings.secondaryTextScale !== undefined) setSecondaryTextScale(initialSettings.secondaryTextScale);
     if (initialSettings.includeLabel !== undefined) setIncludeLabel(initialSettings.includeLabel);
+    if (initialSettings.labelPadding !== undefined) setLabelPadding(initialSettings.labelPadding);
+    if (initialSettings.framePadding !== undefined) setFramePadding(initialSettings.framePadding);
+    if (initialSettings.frameThickness !== undefined) setFrameThickness(initialSettings.frameThickness);
+    if (initialSettings.frameRadius !== undefined) setFrameRadius(initialSettings.frameRadius);
+    if (initialSettings.frameDash !== undefined) setFrameDash(initialSettings.frameDash);
+    if (initialSettings.shadowColor) setShadowColor(initialSettings.shadowColor);
+    if (initialSettings.shadowDepth !== undefined) setShadowDepth(initialSettings.shadowDepth);
     if (initialSettings.qrLevel) setQrLevel(initialSettings.qrLevel);
-    if (initialSettings.activeTheme !== undefined) setActiveTheme(initialSettings.activeTheme);
     if (initialSettings.frameStyle) setFrameStyle(initialSettings.frameStyle);
-    if (initialSettings.centerIcon) setCenterIcon(initialSettings.centerIcon);
     if (initialSettings.centerText !== undefined) setCenterText(initialSettings.centerText);
+    if (initialSettings.centerTextColor) setCenterTextColor(initialSettings.centerTextColor);
     if (initialSettings.centerTextSize !== undefined) setCenterTextSize(initialSettings.centerTextSize);
-    if (initialSettings.centerTextColor) {
-      setCenterTextColor(initialSettings.centerTextColor);
-      setCenterTextColorLocked(false);
-    }
-    if (initialSettings.showGradientBg !== undefined) setShowGradientBg(initialSettings.showGradientBg);
-    if (initialSettings.gradientAngle !== undefined) setGradientAngle(initialSettings.gradientAngle);
     if (initialSettings.dotShape) setDotShape(initialSettings.dotShape);
     if (initialSettings.markerBorderShape) setMarkerBorderShape(initialSettings.markerBorderShape);
     if (initialSettings.markerCenterShape) setMarkerCenterShape(initialSettings.markerCenterShape);
-    if (initialSettings.centerBgShape) setCenterBgShape(initialSettings.centerBgShape);
-    if (initialSettings.centerPaddingH !== undefined) setCenterPaddingH(initialSettings.centerPaddingH);
-    if (initialSettings.centerPaddingV !== undefined) setCenterPaddingV(initialSettings.centerPaddingV);
-    if (initialSettings.shadowDepth !== undefined) setShadowDepth(initialSettings.shadowDepth);
-    if (initialSettings.shadowRounded !== undefined) setShadowRounded(initialSettings.shadowRounded);
+    if (initialSettings.showGradientBg !== undefined) setShowGradientBg(initialSettings.showGradientBg);
+    if (initialSettings.gradientAngle !== undefined) setGradientAngle(initialSettings.gradientAngle);
     if (initialSettings.exportBackground) setExportBackground(initialSettings.exportBackground);
-
+    if (initialSettings.activeTheme !== undefined) setActiveTheme(initialSettings.activeTheme ?? null);
+    previousAccentRef.current = initialSettings.accentColor ?? accentColor;
     initializedRef.current = true;
   }, [initialSettings]);
 
-  useEffect(() => setFgHex(fgColor), [fgColor]);
-  useEffect(() => setBgHex(bgColor), [bgColor]);
-  useEffect(() => setAccentHex(accentColor), [accentColor]);
-  useEffect(() => setCenterTextHex(centerTextColor), [centerTextColor]);
-
-  const normalizeHex = (value: string) => {
-    const next = value.trim();
-    if (!next.startsWith("#")) return null;
-    if (/^#[0-9a-fA-F]{3}$/.test(next)) {
-      return `#${next[1]}${next[1]}${next[2]}${next[2]}${next[3]}${next[3]}`;
+  useEffect(() => {
+    // Keep shadow color in sync with accent unless user set a custom shadow color.
+    if (shadowColor === previousAccentRef.current) {
+      setShadowColor(accentColor);
     }
-    if (/^#[0-9a-fA-F]{6}$/.test(next)) {
-      return next;
-    }
-    return null;
-  };
+    previousAccentRef.current = accentColor;
+  }, [accentColor, shadowColor]);
 
-  const currentSettings = useMemo<QrSettings>(() => ({
-    size,
-    fgColor,
-    bgColor,
-    accentColor,
-    overlayText,
-    secondaryText,
-    primaryTextScale,
-    secondaryTextScale,
-    includeLabel,
-    qrLevel,
-    activeTheme,
-    frameStyle,
-    centerIcon,
-    centerText,
-    centerTextSize,
-    centerTextColor,
-    showGradientBg,
-    gradientAngle,
-    dotShape,
-    markerBorderShape,
-    markerCenterShape,
-    centerBgShape,
-    centerPaddingH,
-    centerPaddingV,
-    shadowDepth,
-    shadowRounded,
-    exportBackground
-  }), [
-    size,
-    fgColor,
-    bgColor,
-    accentColor,
-    overlayText,
-    secondaryText,
-    primaryTextScale,
-    secondaryTextScale,
-    includeLabel,
-    qrLevel,
-    activeTheme,
-    frameStyle,
-    centerIcon,
-    centerText,
-    centerTextSize,
-    centerTextColor,
-    showGradientBg,
-    gradientAngle,
-    dotShape,
-    markerBorderShape,
-    markerCenterShape,
-    centerBgShape,
-    centerPaddingH,
-    centerPaddingV,
-    shadowDepth,
-    shadowRounded,
-    exportBackground
-  ]);
+  const settings = useMemo<QrSettings>(
+    () => ({
+      ...DEFAULT_SETTINGS,
+      size,
+      fgColor,
+      bgColor,
+      accentColor,
+      overlayText,
+      secondaryText,
+      primaryTextScale,
+      secondaryTextScale,
+      includeLabel,
+      labelPadding,
+      framePadding,
+      frameThickness,
+      frameRadius,
+      frameDash,
+      shadowColor,
+      shadowDepth,
+      qrLevel,
+      activeTheme,
+      frameStyle,
+      centerText,
+      centerTextColor,
+      centerTextSize,
+      dotShape,
+      markerBorderShape,
+      markerCenterShape,
+      showGradientBg,
+      gradientAngle,
+      exportBackground,
+    }),
+    [
+      size,
+      fgColor,
+      bgColor,
+      accentColor,
+      overlayText,
+      secondaryText,
+      primaryTextScale,
+      secondaryTextScale,
+      includeLabel,
+      labelPadding,
+      framePadding,
+      frameThickness,
+      frameRadius,
+      frameDash,
+      shadowColor,
+      shadowDepth,
+      qrLevel,
+      activeTheme,
+      frameStyle,
+      centerText,
+      centerTextColor,
+      centerTextSize,
+      dotShape,
+      markerBorderShape,
+      markerCenterShape,
+      showGradientBg,
+      gradientAngle,
+      exportBackground,
+    ]
+  );
 
   useEffect(() => {
     if (!onSettingsChange) return;
-    if (settingsDebounceRef.current) {
-      clearTimeout(settingsDebounceRef.current);
-    }
-    settingsDebounceRef.current = setTimeout(() => {
-      onSettingsChange(currentSettings);
-    }, 500);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => onSettingsChange(settings), 500);
     return () => {
-      if (settingsDebounceRef.current) {
-        clearTimeout(settingsDebounceRef.current);
-      }
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [currentSettings, onSettingsChange]);
+  }, [settings, onSettingsChange]);
 
-  // Generate QR matrix when URL or level changes
-  useEffect(() => {
-    if (!url) return;
-    try {
-      const qr = QRCode.create(url, { errorCorrectionLevel: qrLevel });
-      const modules = qr.modules;
-      const matrix: boolean[][] = [];
-      for (let row = 0; row < modules.size; row++) {
-        const rowData: boolean[] = [];
-        for (let col = 0; col < modules.size; col++) {
-          rowData.push(modules.get(row, col) === 1);
-        }
-        matrix.push(rowData);
-      }
-      setQrMatrix(matrix);
-    } catch (e) {
-      console.error(e);
+  const isMarkerCell = (row: number, col: number, moduleCount: number) => {
+    const inTopLeft = row >= 0 && row <= 6 && col >= 0 && col <= 6;
+    const inTopRight = row >= 0 && row <= 6 && col >= moduleCount - 7 && col <= moduleCount - 1;
+    const inBottomLeft = row >= moduleCount - 7 && row <= moduleCount - 1 && col >= 0 && col <= 6;
+    return inTopLeft || inTopRight || inBottomLeft;
+  };
+
+  const markerRingSvg = (x: number, y: number) => {
+    if (markerBorderShape === "circle") {
+      const cx = x + 3.5;
+      const cy = y + 3.5;
+      return `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${escapeXml(fgColor)}"/><circle cx="${cx}" cy="${cy}" r="2.5" fill="${escapeXml(bgColor)}"/>`;
     }
-  }, [url, qrLevel]);
-
-  // Check if a position is part of position markers
-  function isPositionMarker(row: number, col: number, moduleCount: number): boolean {
-    // Top-left marker: 0-6, 0-6
-    if (row <= 6 && col <= 6) return true;
-    // Top-right marker: 0-6, moduleCount-7 to moduleCount-1
-    if (row <= 6 && col >= moduleCount - 7) return true;
-    // Bottom-left marker: moduleCount-7 to moduleCount-1, 0-6
-    if (row >= moduleCount - 7 && col <= 6) return true;
-    return false;
-  }
-
-  // Check if position is the outer border of a position marker
-  function isMarkerBorder(row: number, col: number, moduleCount: number): boolean {
-    // Check each marker position
-    const markers = [
-      { startRow: 0, startCol: 0 },
-      { startRow: 0, startCol: moduleCount - 7 },
-      { startRow: moduleCount - 7, startCol: 0 },
-    ];
-    
-    for (const marker of markers) {
-      const localRow = row - marker.startRow;
-      const localCol = col - marker.startCol;
-      if (localRow >= 0 && localRow <= 6 && localCol >= 0 && localCol <= 6) {
-        // Outer border is row 0, 6 or col 0, 6 (but not the inner 5x5)
-        if (localRow === 0 || localRow === 6 || localCol === 0 || localCol === 6) {
-          return true;
-        }
-      }
+    if (markerBorderShape === "rounded") {
+      return `<rect x="${x}" y="${y}" width="7" height="7" rx="1.2" ry="1.2" fill="${escapeXml(fgColor)}"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" rx="0.7" ry="0.7" fill="${escapeXml(bgColor)}"/>`;
     }
-    return false;
-  }
+    return `<rect x="${x}" y="${y}" width="7" height="7" fill="${escapeXml(fgColor)}"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="${escapeXml(bgColor)}"/>`;
+  };
 
-  // Check if position is the center of a position marker (3x3 inner square)
-  function isMarkerCenter(row: number, col: number, moduleCount: number): boolean {
-    const markers = [
-      { startRow: 0, startCol: 0 },
-      { startRow: 0, startCol: moduleCount - 7 },
-      { startRow: moduleCount - 7, startCol: 0 },
-    ];
-    
-    for (const marker of markers) {
-      const localRow = row - marker.startRow;
-      const localCol = col - marker.startCol;
-      if (localRow >= 2 && localRow <= 4 && localCol >= 2 && localCol <= 4) {
-        return true;
-      }
+  const markerCenterSvg = (x: number, y: number) => {
+    if (markerCenterShape === "circle") {
+      return `<circle cx="${x + 3.5}" cy="${y + 3.5}" r="1.5" fill="${escapeXml(fgColor)}"/>`;
     }
-    return false;
-  }
+    if (markerCenterShape === "rounded") {
+      return `<rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="0.7" ry="0.7" fill="${escapeXml(fgColor)}"/>`;
+    }
+    return `<rect x="${x + 2}" y="${y + 2}" width="3" height="3" fill="${escapeXml(fgColor)}"/>`;
+  };
 
-  // Draw QR code with custom module shapes
-  useEffect(() => {
-    if (!qrMatrix || !qrCanvasRef.current) return;
-    const canvas = qrCanvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const margin = 4;
-    const moduleCount = qrMatrix.length;
-    const moduleSize = (size - margin * 2) / moduleCount;
-    
-    canvas.width = size;
-    canvas.height = size;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, size, size);
-    ctx.fillStyle = fgColor;
-
-    // First pass: Draw position marker borders as connected shapes
-    drawPositionMarkers(ctx, moduleCount, moduleSize, margin);
-    
-    // Second pass: Draw data dots (non-marker modules)
+  const drawDot = (x: number, y: number) => {
+    if (dotShape === "circle") {
+      return `<circle cx="${x + 0.5}" cy="${y + 0.5}" r="0.42" fill="${escapeXml(fgColor)}"/>`;
+    }
     if (dotShape === "rounded") {
-      // Draw connected rounded modules
-      drawConnectedRoundedModules(ctx, moduleCount, moduleSize, margin);
-    } else {
-      // Draw individual modules (square or circle)
-      for (let row = 0; row < moduleCount; row++) {
-        for (let col = 0; col < moduleCount; col++) {
-          if (qrMatrix[row][col] && !isPositionMarker(row, col, moduleCount)) {
-            const x = margin + col * moduleSize;
-            const y = margin + row * moduleSize;
-            const s = moduleSize * 0.85;
-            const offset = moduleSize * 0.075;
-            drawModule(ctx, x + offset, y + offset, s, dotShape);
-          }
-        }
-      }
+      return `<rect x="${x + 0.05}" y="${y + 0.05}" width="0.9" height="0.9" rx="0.26" ry="0.26" fill="${escapeXml(fgColor)}"/>`;
     }
-  }, [qrMatrix, size, fgColor, dotShape, markerBorderShape, markerCenterShape]);
+    return `<rect x="${x + 0.05}" y="${y + 0.05}" width="0.9" height="0.9" fill="${escapeXml(fgColor)}"/>`;
+  };
 
-  // Draw connected rounded modules (flowing style)
-  function drawConnectedRoundedModules(ctx: CanvasRenderingContext2D, moduleCount: number, moduleSize: number, margin: number) {
-    if (!qrMatrix) return;
-    
-    const r = moduleSize * 0.4; // Corner radius
-    
+  const buildStyledSvg = async () => {
+    const qr = QRCode.create(url, { errorCorrectionLevel: qrLevel });
+    const modules = qr.modules;
+    const moduleCount = modules.size;
+    const margin = 1;
+    const qrView = moduleCount + margin * 2;
+
+    const markerPositions = [
+      { x: margin, y: margin },
+      { x: margin + moduleCount - 7, y: margin },
+      { x: margin, y: margin + moduleCount - 7 },
+    ];
+
+    const markerSvg = markerPositions
+      .map((pos) => `${markerRingSvg(pos.x, pos.y)}${markerCenterSvg(pos.x, pos.y)}`)
+      .join("");
+
+    let dotSvg = "";
     for (let row = 0; row < moduleCount; row++) {
       for (let col = 0; col < moduleCount; col++) {
-        if (!qrMatrix[row][col] || isPositionMarker(row, col, moduleCount)) continue;
-        
-        const x = margin + col * moduleSize;
-        const y = margin + row * moduleSize;
-        const s = moduleSize;
-        
-        // Check neighbors
-        const top = row > 0 && qrMatrix[row - 1][col] && !isPositionMarker(row - 1, col, moduleCount);
-        const bottom = row < moduleCount - 1 && qrMatrix[row + 1][col] && !isPositionMarker(row + 1, col, moduleCount);
-        const left = col > 0 && qrMatrix[row][col - 1] && !isPositionMarker(row, col - 1, moduleCount);
-        const right = col < moduleCount - 1 && qrMatrix[row][col + 1] && !isPositionMarker(row, col + 1, moduleCount);
-        
-        ctx.beginPath();
-        
-        // Top-left corner
-        if (top && left) {
-          ctx.moveTo(x, y);
-        } else if (top) {
-          ctx.moveTo(x, y);
-        } else if (left) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.moveTo(x + r, y);
-        }
-        
-        // Top-right corner
-        if (top && right) {
-          ctx.lineTo(x + s, y);
-        } else if (top) {
-          ctx.lineTo(x + s, y);
-        } else if (right) {
-          ctx.lineTo(x + s - r, y);
-          ctx.quadraticCurveTo(x + s, y, x + s, y + r);
-        } else {
-          ctx.lineTo(x + s - r, y);
-          ctx.quadraticCurveTo(x + s, y, x + s, y + r);
-        }
-        
-        // Bottom-right corner
-        if (bottom && right) {
-          ctx.lineTo(x + s, y + s);
-        } else if (bottom) {
-          ctx.lineTo(x + s, y + s);
-        } else if (right) {
-          ctx.lineTo(x + s, y + s - r);
-          ctx.quadraticCurveTo(x + s, y + s, x + s - r, y + s);
-        } else {
-          ctx.lineTo(x + s, y + s - r);
-          ctx.quadraticCurveTo(x + s, y + s, x + s - r, y + s);
-        }
-        
-        // Bottom-left corner
-        if (bottom && left) {
-          ctx.lineTo(x, y + s);
-        } else if (bottom) {
-          ctx.lineTo(x, y + s);
-        } else if (left) {
-          ctx.lineTo(x + r, y + s);
-          ctx.quadraticCurveTo(x, y + s, x, y + s - r);
-        } else {
-          ctx.lineTo(x + r, y + s);
-          ctx.quadraticCurveTo(x, y + s, x, y + s - r);
-        }
-        
-        // Back to top-left
-        if (top && left) {
-          ctx.lineTo(x, y);
-        } else if (top) {
-          ctx.lineTo(x, y);
-        } else if (left) {
-          ctx.lineTo(x, y + r);
-          ctx.quadraticCurveTo(x, y, x + r, y);
-        } else {
-          ctx.lineTo(x, y + r);
-          ctx.quadraticCurveTo(x, y, x + r, y);
-        }
-        
-        ctx.closePath();
-        ctx.fill();
+        if (modules.get(row, col) !== 1) continue;
+        if (isMarkerCell(row, col, moduleCount)) continue;
+        dotSvg += drawDot(margin + col, margin + row);
       }
     }
-  }
+    const qrInner = `${markerSvg}${dotSvg}`;
 
-  // Draw position markers with custom border and center shapes
-  function drawPositionMarkers(ctx: CanvasRenderingContext2D, moduleCount: number, moduleSize: number, margin: number) {
-    const markers = [
-      { startRow: 0, startCol: 0 },
-      { startRow: 0, startCol: moduleCount - 7 },
-      { startRow: moduleCount - 7, startCol: 0 },
-    ];
+    const padding = 28;
+    const qrSize = size;
+    const frameStroke = frameStyle === "none" ? 0 : Math.max(1, frameThickness);
+    const effectiveFrameRadius = frameStyle === "none" ? 0 : Math.max(0, frameRadius);
+    const effectiveFramePadding = frameStyle === "none" ? 0 : Math.max(0, framePadding);
 
-    for (const marker of markers) {
-      const x = margin + marker.startCol * moduleSize;
-      const y = margin + marker.startRow * moduleSize;
-      const outerSize = 7 * moduleSize;
-      const innerSize = 3 * moduleSize;
-      const gap = moduleSize; // Gap between border and center
-      
-      // Draw outer border (ring)
-      ctx.fillStyle = fgColor;
-      drawMarkerBorder(ctx, x, y, outerSize, moduleSize, markerBorderShape);
-      
-      // Draw center (3x3 filled square)
-      const centerX = x + 2 * moduleSize;
-      const centerY = y + 2 * moduleSize;
-      drawMarkerCenter(ctx, centerX, centerY, innerSize, markerCenterShape);
+    const primarySize = Math.max(12, size / 16) * primaryTextScale;
+    const secondarySize = Math.max(10, size / 20) * secondaryTextScale;
+
+    const labelCount =
+      (includeLabel ? 1 : 0) +
+      (overlayText.trim() ? 1 : 0) +
+      (secondaryText.trim() ? 1 : 0);
+
+    const labelBlockHeight = labelCount === 0 ? 0 : 18 + (includeLabel ? primarySize + 6 : 0) + (overlayText.trim() ? primarySize + 4 : 0) + (secondaryText.trim() ? secondarySize + 4 : 0);
+
+    const width = qrSize + (padding + effectiveFramePadding) * 2;
+    const qrTop = padding + effectiveFramePadding;
+    const qrLeft = padding + effectiveFramePadding;
+    const qrBottom = qrTop + qrSize;
+    const height = qrBottom + labelBlockHeight + padding;
+
+    const backgroundFill = showGradientBg
+      ? `url(#qrf-gradient)`
+      : exportBackground === "transparent"
+        ? "transparent"
+        : bgColor;
+
+    const frameStrokeDash = frameStyle === "dashed" ? ` stroke-dasharray="${Math.max(2, frameDash)} ${Math.max(2, frameDash)}"` : "";
+    const shadowOffset = frameStyle === "shadow" ? Math.max(2, shadowDepth) : 0;
+    const shadowOpacity = frameStyle === "shadow" ? 1 : 0;
+
+    const centerTextTrimmed = centerText.trim();
+    const centerTextEnabled = centerTextTrimmed.length > 0;
+    const centerFontSize = Math.max(10, size / 14) * centerTextSize;
+    const centerBoxW = Math.max(64, centerTextTrimmed.length * (centerFontSize * 0.58) + 20);
+    const centerBoxH = Math.max(28, centerFontSize + 12);
+    const centerBoxX = qrLeft + qrSize / 2 - centerBoxW / 2;
+    const centerBoxY = qrTop + qrSize / 2 - centerBoxH / 2;
+
+    const frameOffset = frameStyle === "none" ? 0 : effectiveFramePadding;
+    const labelTopGap = 16 + frameOffset + Math.max(0, labelPadding);
+    let labelY = qrBottom + labelTopGap;
+    let labelSvg = "";
+
+    if (includeLabel) {
+      labelSvg += `<text x="${width / 2}" y="${labelY}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="700" font-size="${Math.round(primarySize)}" fill="${escapeXml(fgColor)}">${escapeXml(deviceName)}</text>`;
+      labelY += primarySize + 8;
     }
-  }
-
-  // Draw the outer border ring of a position marker
-  function drawMarkerBorder(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, thickness: number, shape: string) {
-    const outerPadding = thickness * 0.1;
-    const adjustedX = x + outerPadding;
-    const adjustedY = y + outerPadding;
-    const adjustedSize = size - outerPadding * 2;
-    
-    ctx.beginPath();
-    
-    if (shape === "circle") {
-      // Draw outer circle
-      const centerX = adjustedX + adjustedSize / 2;
-      const centerY = adjustedY + adjustedSize / 2;
-      const outerRadius = adjustedSize / 2;
-      const innerRadius = outerRadius - thickness;
-      
-      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
-      ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2, true);
-    } else if (shape === "rounded") {
-      // Rounded rectangle ring
-      const radius = thickness * 1.5;
-      const innerGap = thickness;
-      
-      // Outer rounded rect
-      ctx.roundRect(adjustedX, adjustedY, adjustedSize, adjustedSize, radius);
-      // Inner rounded rect (cut out)
-      ctx.roundRect(adjustedX + innerGap, adjustedY + innerGap, adjustedSize - innerGap * 2, adjustedSize - innerGap * 2, radius * 0.5);
-    } else {
-      // Square ring
-      const innerGap = thickness;
-      ctx.rect(adjustedX, adjustedY, adjustedSize, adjustedSize);
-      ctx.rect(adjustedX + innerGap, adjustedY + innerGap, adjustedSize - innerGap * 2, adjustedSize - innerGap * 2);
+    if (overlayText.trim()) {
+      labelSvg += `<text x="${width / 2}" y="${labelY}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="700" font-size="${Math.round(primarySize)}" fill="${escapeXml(accentColor)}">${escapeXml(overlayText.trim())}</text>`;
+      labelY += primarySize + 6;
     }
-    
-    ctx.fill("evenodd");
-  }
-
-  // Draw the center of a position marker
-  function drawMarkerCenter(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, shape: string) {
-    const padding = size * 0.1;
-    const adjustedX = x + padding;
-    const adjustedY = y + padding;
-    const adjustedSize = size - padding * 2;
-    
-    ctx.beginPath();
-    
-    if (shape === "circle") {
-      ctx.arc(adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2, adjustedSize / 2, 0, Math.PI * 2);
-    } else {
-      // Square
-      ctx.rect(adjustedX, adjustedY, adjustedSize, adjustedSize);
+    if (secondaryText.trim()) {
+      labelSvg += `<text x="${width / 2}" y="${labelY}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="500" font-size="${Math.round(secondarySize)}" fill="${escapeXml(fgColor)}" opacity="0.9">${escapeXml(secondaryText.trim())}</text>`;
     }
-    
-    ctx.fill();
-  }
 
-  // Draw a single module with the selected shape
-  function drawModule(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, shape: string) {
-    ctx.beginPath();
-    switch (shape) {
-      case "rounded":
-        const r = s * 0.35;
-        ctx.roundRect(x, y, s, s, r);
-        break;
-      case "circle":
-        ctx.arc(x + s / 2, y + s / 2, s / 2, 0, Math.PI * 2);
-        break;
-      default: // square
-        ctx.rect(x, y, s, s);
+    return `
+<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(width)}" height="${Math.round(height)}" viewBox="0 0 ${Math.round(width)} ${Math.round(height)}">
+  <defs>
+    <linearGradient id="qrf-gradient" x1="0%" y1="0%" x2="100%" y2="100%" gradientTransform="rotate(${Math.round(gradientAngle)}, .5, .5)">
+      <stop offset="0%" stop-color="${escapeXml(bgColor)}"/>
+      <stop offset="100%" stop-color="${escapeXml(accentColor)}" stop-opacity="0.25"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="100%" height="100%" fill="${backgroundFill}"/>
+  ${frameStyle === "none" ? "" : frameStyle === "shadow"
+      ? `<rect x="${qrLeft - effectiveFramePadding + shadowOffset}" y="${qrTop - effectiveFramePadding + shadowOffset}" width="${qrSize + effectiveFramePadding * 2}" height="${qrSize + effectiveFramePadding * 2}" rx="${effectiveFrameRadius}" ry="${effectiveFrameRadius}" fill="${escapeXml(shadowColor)}" opacity="${shadowOpacity}"/><rect x="${qrLeft - effectiveFramePadding}" y="${qrTop - effectiveFramePadding}" width="${qrSize + effectiveFramePadding * 2}" height="${qrSize + effectiveFramePadding * 2}" rx="${effectiveFrameRadius}" ry="${effectiveFrameRadius}" fill="${escapeXml(bgColor)}" stroke="${escapeXml(accentColor)}" stroke-width="${frameStroke}"/>`
+      : `<rect x="${qrLeft - effectiveFramePadding}" y="${qrTop - effectiveFramePadding}" width="${qrSize + effectiveFramePadding * 2}" height="${qrSize + effectiveFramePadding * 2}" rx="${effectiveFrameRadius}" ry="${effectiveFrameRadius}" fill="none" stroke="${escapeXml(accentColor)}" stroke-width="${frameStroke}"${frameStrokeDash}/>`
     }
-    ctx.fill();
-  }
+  <g transform="translate(${qrLeft},${qrTop}) scale(${qrSize / qrView})">
+    ${qrInner}
+  </g>
+  ${centerTextEnabled ? `<rect x="${centerBoxX}" y="${centerBoxY}" width="${centerBoxW}" height="${centerBoxH}" rx="${Math.round(centerBoxH * 0.25)}" ry="${Math.round(centerBoxH * 0.25)}" fill="${escapeXml(bgColor)}"/><text x="${qrLeft + qrSize / 2}" y="${qrTop + qrSize / 2 + centerFontSize * 0.35}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="700" font-size="${Math.round(centerFontSize)}" fill="${escapeXml(centerTextColor)}">${escapeXml(centerTextTrimmed)}</text>` : ""}
+  ${labelSvg}
+</svg>`.trim();
+  };
 
-  const applyTheme = (theme: typeof THEMES[0]) => {
-    setFgColor(theme.fg);
-    setBgColor(theme.bg);
-    setAccentColor(theme.accent);
+  useEffect(() => {
+    let cancelled = false;
+
+    const renderPreview = async () => {
+      try {
+        const svg = await buildStyledSvg();
+        if (!cancelled) setSvgMarkup(svg);
+      } catch (error) {
+        console.error("Failed to generate SVG preview:", error);
+      }
+    };
+
+    void renderPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settings, url, deviceName]);
+
+  const downloadSvg = async () => {
+    try {
+      const svg = await buildStyledSvg();
+      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `${sanitizeFileName(deviceName)}_qr.svg`;
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+      toast.success("SVG downloaded");
+    } catch (error) {
+      console.error("SVG download failed:", error);
+      toast.error("Failed to download SVG");
+    }
+  };
+
+  const downloadPng = async () => {
+    try {
+      const svg = await buildStyledSvg();
+      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const objectUrl = URL.createObjectURL(svgBlob);
+      const image = new Image();
+
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("SVG image load failed"));
+        image.src = objectUrl;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("2D context unavailable");
+
+      if (exportBackground === "white") {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(image, 0, 0);
+      URL.revokeObjectURL(objectUrl);
+
+      const pngUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = pngUrl;
+      link.download = `${sanitizeFileName(deviceName)}_qr.png`;
+      link.click();
+      toast.success("PNG downloaded");
+    } catch (error) {
+      console.error("PNG download failed:", error);
+      toast.error("Failed to download PNG");
+    }
+  };
+
+  const copySvgToClipboard = async () => {
+    try {
+      const svg = await buildStyledSvg();
+      await navigator.clipboard.writeText(svg);
+      setCopiedSvg(true);
+      setTimeout(() => setCopiedSvg(false), 1500);
+      toast.success("SVG markup copied");
+    } catch (error) {
+      console.error("Copy SVG failed:", error);
+      toast.error("Failed to copy SVG markup");
+    }
+  };
+
+  const applyTheme = (theme: ThemePreset) => {
+    setFgColor(theme.fgColor);
+    setBgColor(theme.bgColor);
+    setAccentColor(theme.accentColor);
     setActiveTheme(theme.name);
   };
 
-  const applyThemeSettings = (settings: Partial<QrSettings>, name?: string) => {
-    if (settings.size !== undefined) setSize(settings.size);
-    if (settings.fgColor) setFgColor(settings.fgColor);
-    if (settings.bgColor) setBgColor(settings.bgColor);
-    if (settings.accentColor) setAccentColor(settings.accentColor);
-    if (settings.overlayText !== undefined) setOverlayText(settings.overlayText);
-    if (settings.secondaryText !== undefined) setSecondaryText(settings.secondaryText);
-    if (settings.primaryTextScale !== undefined) setPrimaryTextScale(settings.primaryTextScale);
-    if (settings.secondaryTextScale !== undefined) setSecondaryTextScale(settings.secondaryTextScale);
-    if (settings.includeLabel !== undefined) setIncludeLabel(settings.includeLabel);
-    if (settings.qrLevel) setQrLevel(settings.qrLevel);
-    if (settings.frameStyle) setFrameStyle(settings.frameStyle);
-    if (settings.centerIcon) setCenterIcon(settings.centerIcon);
-    if (settings.centerText !== undefined) setCenterText(settings.centerText);
-    if (settings.centerTextSize !== undefined) setCenterTextSize(settings.centerTextSize);
-    if (settings.centerTextColor) {
-      setCenterTextColor(settings.centerTextColor);
-      setCenterTextColorLocked(false);
-    }
-    if (settings.showGradientBg !== undefined) setShowGradientBg(settings.showGradientBg);
-    if (settings.gradientAngle !== undefined) setGradientAngle(settings.gradientAngle);
-    if (settings.dotShape) setDotShape(settings.dotShape);
-    if (settings.markerBorderShape) setMarkerBorderShape(settings.markerBorderShape);
-    if (settings.markerCenterShape) setMarkerCenterShape(settings.markerCenterShape);
-    if (settings.centerBgShape) setCenterBgShape(settings.centerBgShape);
-    if (settings.centerPaddingH !== undefined) setCenterPaddingH(settings.centerPaddingH);
-    if (settings.centerPaddingV !== undefined) setCenterPaddingV(settings.centerPaddingV);
-    if (settings.shadowDepth !== undefined) setShadowDepth(settings.shadowDepth);
-    if (settings.shadowRounded !== undefined) setShadowRounded(settings.shadowRounded);
-    if (settings.exportBackground) setExportBackground(settings.exportBackground);
-    setActiveTheme(name ?? null);
-  };
-
-  const getFrameStyle = useCallback(() => {
-    const baseRadius = frameStyle === "rounded" || (frameStyle === "shadow" && shadowRounded) ? "24px" : "0px";
-    const baseStyle: React.CSSProperties = {
-      padding: "24px",
-      borderRadius: baseRadius,
-    };
-
-    switch (frameStyle) {
-      case "simple":
-        return { ...baseStyle, border: `3px solid ${accentColor}` };
-      case "rounded":
-        return { ...baseStyle, border: `4px solid ${accentColor}` };
-      case "double":
-        return { ...baseStyle, border: `4px double ${accentColor}` };
-      case "dashed":
-        return { ...baseStyle, border: `3px dashed ${accentColor}` };
-      case "shadow":
-        return { ...baseStyle, boxShadow: `${shadowDepth}px ${shadowDepth}px 0px ${accentColor}`, border: `2px solid ${accentColor}` };
-      case "gradient":
-        return { 
-          ...baseStyle, 
-          border: "4px solid transparent",
-          backgroundImage: `linear-gradient(${bgColor}, ${bgColor}), linear-gradient(${gradientAngle}deg, ${fgColor}, ${accentColor})`,
-          backgroundOrigin: "border-box",
-          backgroundClip: "padding-box, border-box",
-        };
-      case "corners":
-        return { ...baseStyle, position: "relative" as const };
-      default:
-        return baseStyle;
-    }
-  }, [frameStyle, accentColor, bgColor, fgColor, gradientAngle, shadowDepth, shadowRounded]);
-
-  const getBackgroundStyle = useCallback(() => {
-    if (showGradientBg) {
-      return {
-        background: `linear-gradient(${gradientAngle}deg, ${bgColor}, ${lightenColor(bgColor, 20)})`,
-      };
-    }
-    return { backgroundColor: bgColor };
-  }, [showGradientBg, gradientAngle, bgColor]);
-
-  // Helper to lighten a color
-  function lightenColor(color: string, percent: number): string {
-    const num = parseInt(color.replace("#", ""), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.min(255, (num >> 16) + amt);
-    const G = Math.min(255, ((num >> 8) & 0x00ff) + amt);
-    const B = Math.min(255, (num & 0x0000ff) + amt);
-    return `#${((1 << 24) + (R << 16) + (G << 8) + B).toString(16).slice(1)}`;
-  }
-
-  const selectedIcon = CENTER_ICONS.find(i => i.id === centerIcon);
-  const centerContent = centerIcon === "custom" ? centerText : selectedIcon?.emoji || "";
-  const hasCenterContent = centerIcon !== "none" && (centerIcon === "custom" ? centerText.trim() !== "" : !!selectedIcon?.emoji);
-  const centerPreviewFontSize = centerIcon === "custom"
-    ? Math.max(8, Math.min(size / 6, (size / 4) / Math.max(1, centerContent.length / 3)) * centerTextSize)
-    : size / 6;
-  const centerPreviewTextWidth = centerIcon === "custom"
-    ? Math.max(1, centerContent.length) * (centerPreviewFontSize * 0.6)
-    : centerPreviewFontSize;
-  const centerPreviewBgWidth = centerPreviewTextWidth + centerPaddingH * 2;
-  const centerPreviewBgHeight = centerPreviewFontSize + centerPaddingV * 2;
-  const primaryTextFontSize = Math.max(12, size / 18) * primaryTextScale;
-  const secondaryTextFontSize = Math.max(10, size / 20) * secondaryTextScale;
-
-  // Get center background border radius based on shape
-  const getCenterBgRadius = (baseSize: number) => {
-    switch (centerBgShape) {
-      case "circle": return "50%";
-      case "rounded": return `${baseSize * 0.2}px`;
-      case "square": return "0";
-      default: return "50%";
-    }
-  };
-
-  // Draw center content background on canvas
-  function drawCenterBackground(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, shape: string) {
-    ctx.beginPath();
-    switch (shape) {
-      case "circle":
-        ctx.arc(cx, cy, Math.max(w, h) / 2, 0, Math.PI * 2);
-        break;
-      case "rounded":
-        const r = Math.min(w, h) * 0.2;
-        ctx.roundRect(cx - w / 2, cy - h / 2, w, h, r);
-        break;
-      case "square":
-        ctx.rect(cx - w / 2, cy - h / 2, w, h);
-        break;
-    }
-    ctx.fill();
-  }
-
-  const downloadImage = async () => {
-    try {
-      const dataUrl = await generateStyledQrDataUrl({
-        url,
-        deviceName,
-        settings: currentSettings,
-      });
-
-      const link = document.createElement("a");
-      link.download = `${deviceName.replace(/\s+/g, "_")}_qr.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (error) {
-      console.error("Download image error:", error);
-      toast.error("Failed to generate PNG");
-    }
+  const applyThemeSettings = (themeSettings: Partial<QrSettings>, name: string) => {
+    if (themeSettings.fgColor) setFgColor(themeSettings.fgColor);
+    if (themeSettings.bgColor) setBgColor(themeSettings.bgColor);
+    if (themeSettings.accentColor) setAccentColor(themeSettings.accentColor);
+    if (themeSettings.overlayText !== undefined) setOverlayText(themeSettings.overlayText);
+    if (themeSettings.secondaryText !== undefined) setSecondaryText(themeSettings.secondaryText);
+    if (themeSettings.primaryTextScale !== undefined) setPrimaryTextScale(themeSettings.primaryTextScale);
+    if (themeSettings.secondaryTextScale !== undefined) setSecondaryTextScale(themeSettings.secondaryTextScale);
+    if (themeSettings.includeLabel !== undefined) setIncludeLabel(themeSettings.includeLabel);
+    if (themeSettings.labelPadding !== undefined) setLabelPadding(themeSettings.labelPadding);
+    if (themeSettings.framePadding !== undefined) setFramePadding(themeSettings.framePadding);
+    if (themeSettings.frameThickness !== undefined) setFrameThickness(themeSettings.frameThickness);
+    if (themeSettings.frameRadius !== undefined) setFrameRadius(themeSettings.frameRadius);
+    if (themeSettings.frameDash !== undefined) setFrameDash(themeSettings.frameDash);
+    if (themeSettings.shadowColor) setShadowColor(themeSettings.shadowColor);
+    if (themeSettings.shadowDepth !== undefined) setShadowDepth(themeSettings.shadowDepth);
+    if (themeSettings.qrLevel) setQrLevel(themeSettings.qrLevel);
+    if (themeSettings.frameStyle) setFrameStyle(themeSettings.frameStyle);
+    if (themeSettings.centerText !== undefined) setCenterText(themeSettings.centerText);
+    if (themeSettings.centerTextColor) setCenterTextColor(themeSettings.centerTextColor);
+    if (themeSettings.centerTextSize !== undefined) setCenterTextSize(themeSettings.centerTextSize);
+    if (themeSettings.dotShape) setDotShape(themeSettings.dotShape);
+    if (themeSettings.markerBorderShape) setMarkerBorderShape(themeSettings.markerBorderShape);
+    if (themeSettings.markerCenterShape) setMarkerCenterShape(themeSettings.markerCenterShape);
+    if (themeSettings.showGradientBg !== undefined) setShowGradientBg(themeSettings.showGradientBg);
+    if (themeSettings.gradientAngle !== undefined) setGradientAngle(themeSettings.gradientAngle);
+    if (themeSettings.exportBackground) setExportBackground(themeSettings.exportBackground);
+    setActiveTheme(name);
   };
 
   const saveTheme = async () => {
     const name = themeName.trim();
     if (!name) {
-      toast.error("Please enter a theme name.");
+      toast.error("Theme name is required");
       return;
     }
+
     setSavingTheme(true);
     try {
       const res = await fetch("/api/qr-themes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, settings: currentSettings })
+        body: JSON.stringify({ name, settings }),
       });
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.error(data?.error || "Failed to save theme.");
+        toast.error(data?.error ?? "Failed to save theme");
         return;
       }
-      toast.success("Theme saved.");
+
+      const latestThemes = await fetch("/api/qr-themes").then((r) => (r.ok ? r.json() : []));
+      setCustomThemes(latestThemes ?? []);
       setThemeName("");
+      toast.success("Theme saved");
     } catch (error) {
-      console.error("Save theme error:", error);
-      toast.error("Failed to save theme.");
+      console.error("Save theme failed:", error);
+      toast.error("Failed to save theme");
     } finally {
       setSavingTheme(false);
     }
   };
 
-  if (!mounted) {
-    return <div className="h-64 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />;
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="sticky top-24 z-10">
-        <div className="space-y-4 rounded-2xl bg-white dark:bg-black/80 ring-1 ring-gray-200/70 dark:ring-gray-700/70 p-4 shadow-lg">
-          {(profileBlurb || profileAvatarUrl) && (
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">About</p>
-              <div className="flex gap-3 items-start">
-                {profileAvatarUrl && (
-                  <div className={`h-14 w-14 overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0 ${
-                    profileAvatarShape === "circle" ? "rounded-full" : profileAvatarShape === "rounded" ? "rounded-xl" : ""
-                  }`}>
-                    <img src={profileAvatarUrl} alt="Profile avatar" className="h-full w-full object-contain" />
-                  </div>
-                )}
-                {profileBlurb && (
-                  <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{profileBlurb}</p>
-                )}
-              </div>
-            </div>
-          )}
-          {/* QR Code Display */}
-          <div className="flex justify-center">
-            <div
-              ref={qrRef}
-              style={{ ...getFrameStyle(), ...getBackgroundStyle() }}
-              className="relative"
-            >
-              {/* Corner brackets decoration */}
-              {frameStyle === "corners" && (
-                <>
-                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 rounded-tl-sm" style={{ borderColor: accentColor }} />
-                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 rounded-tr-sm" style={{ borderColor: accentColor }} />
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 rounded-bl-sm" style={{ borderColor: accentColor }} />
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 rounded-br-sm" style={{ borderColor: accentColor }} />
-                </>
-              )}
-              
-              <div className="relative">
-                <canvas
-                  ref={qrCanvasRef}
-                  width={size}
-                  height={size}
-                />
-                {/* Center content overlay (icon or custom text) */}
-                {hasCenterContent && (
-                  <div 
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                  >
-                    <div 
-                      className="flex items-center justify-center font-bold"
-                      style={{ 
-                        backgroundColor: bgColor,
-                        minWidth: centerPreviewBgWidth,
-                        height: centerPreviewBgHeight,
-                        fontSize: centerPreviewFontSize,
-                        borderRadius: getCenterBgRadius(Math.max(centerPreviewBgWidth, centerPreviewBgHeight)),
-                        padding: `${centerPaddingV}px ${centerPaddingH}px`,
-                    color: centerIcon === "custom" ? centerTextColor : fgColor,
-                  }}
-                >
-                  {centerContent}
-                </div>
-                  </div>
-                )}
-              </div>
-              
-              {includeLabel && (
-                <p
-                  className="text-center mt-3 font-bold"
-                  style={{ color: fgColor, fontSize: Math.max(14, size / 14) }}
-                >
-                  {deviceName}
-                </p>
-              )}
-              {overlayText && (
-                <p
-                  className="text-center mt-1 font-medium"
-                  style={{ color: accentColor, fontSize: primaryTextFontSize }}
-                >
-                  {overlayText}
-                </p>
-              )}
-              {secondaryText && (
-                <p
-                  className="text-center mt-1"
-                  style={{ color: fgColor, fontSize: secondaryTextFontSize, opacity: 0.8 }}
-                >
-                  {secondaryText}
-                </p>
-              )}
-            </div>
-          </div>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Live SVG Preview</h3>
+          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+            Vector Output
+          </span>
+        </div>
 
-          {/* Download Button */}
+        <div className="overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+          <div
+            className="mx-auto max-w-full [&_svg]:h-auto [&_svg]:max-w-full"
+            dangerouslySetInnerHTML={{ __html: svgMarkup }}
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
-            onClick={downloadImage}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-medium"
+            onClick={downloadSvg}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
           >
-            <Download size={18} /> Download PNG
+            <FileType2 size={16} /> Download SVG
+          </button>
+          <button
+            onClick={downloadPng}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-medium text-white hover:bg-black dark:bg-gray-700 dark:hover:bg-gray-600"
+          >
+            <FileImage size={16} /> Download PNG
+          </button>
+          <button
+            onClick={copySvgToClipboard}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            {copiedSvg ? <Check size={16} /> : <Download size={16} />} {copiedSvg ? "Copied" : "Copy SVG"}
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-6">
-        {/* Theme Presets */}
-        <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
-          <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200 mb-3">
-            <Sparkles size={18} /> Quick Themes
-          </h3>
+      <section className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">QR Settings</h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Designed to produce clean SVG exports first, with optional PNG output.</p>
+        </div>
+
+        <div className="space-y-3">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</label>
           <div className="flex flex-wrap gap-2">
-            {THEMES.map((theme) => (
+            {THEME_PRESETS.map((preset) => (
               <button
-                key={theme.name}
-                onClick={() => applyTheme(theme)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  activeTheme === theme.name
-                    ? "ring-2 ring-offset-2 ring-blue-500"
-                    : ""
-                }`}
-                style={{ 
-                  backgroundColor: theme.bg, 
-                  color: theme.fg,
-                  border: `2px solid ${theme.accent}`
-                }}
+                key={preset.name}
+                type="button"
+                onClick={() => applyTheme(preset)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${activeTheme === preset.name ? "border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900" : "border-gray-300 dark:border-gray-600"}`}
+                style={{ backgroundColor: preset.bgColor, color: preset.fgColor }}
+              >
+                {preset.name}
+              </button>
+            ))}
+            {customThemes.map((theme) => (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => applyThemeSettings(theme.settings, theme.name)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${activeTheme === theme.name ? "border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900" : "border-gray-300 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"}`}
               >
                 {theme.name}
               </button>
             ))}
           </div>
-          {customThemes.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide mb-2">Custom Themes</p>
-              <div className="flex flex-wrap gap-2">
-                {customThemes.map((theme) => (
-                  <button
-                    key={theme.id}
-                    onClick={() => applyThemeSettings(theme.settings, theme.name)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      activeTheme === theme.name ? "ring-2 ring-offset-2 ring-blue-500" : ""
-                    }`}
-                  >
-                    {theme.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-          {/* Customization Options */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 space-y-4">
-        <h3 className="font-semibold flex items-center gap-2 text-gray-700 dark:text-gray-200">
-          <Settings size={18} /> Customization
-        </h3>
-
-        {/* Size & Level Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Maximize2 size={14} /> Zoom
-            </label>
-            <input
-              type="range"
-              min="150"
-              max="350"
-              value={size}
-              onChange={(e) => setSize(Number(e.target.value))}
-              className="w-full accent-orange-500"
-            />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{Math.round((size / 200) * 100)}%</span>
+            <label className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"><Settings size={14} /> QR Size</label>
+            <input type="range" min="220" max="600" step="10" value={size} onChange={(e) => setSize(Number(e.target.value))} className="w-full" />
+            <p className="text-xs text-gray-500 dark:text-gray-400">{size}px</p>
           </div>
-
           <div>
-            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Error Level</label>
+            <label className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300">Error Level</label>
             <select
               value={qrLevel}
               onChange={(e) => setQrLevel(e.target.value as "L" | "M" | "Q" | "H")}
-              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
             >
-              <option value="L">Low (7%)</option>
-              <option value="M">Medium (15%)</option>
-              <option value="Q">Quartile (25%)</option>
-              <option value="H">High (30%) - Best for icons</option>
+              <option value="L">L (7%)</option>
+              <option value="M">M (15%)</option>
+              <option value="Q">Q (25%)</option>
+              <option value="H">H (30%)</option>
             </select>
           </div>
         </div>
 
-        {/* QR Style Section */}
-        <div className="space-y-4">
-          {/* Dots Shape */}
+        <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
-              Dots
-            </label>
-            <div className="flex gap-2">
-              {DOT_SHAPES.map((shape) => (
-                <button
-                  key={shape.id}
-                  onClick={() => setDotShape(shape.id)}
-                  className={`flex-1 flex items-center justify-center p-3 rounded-lg text-xl transition-all border ${
-                    dotShape === shape.id
-                      ? "bg-gray-900 dark:bg-white border-gray-900 dark:border-white text-white dark:text-gray-900"
-                      : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:border-gray-400"
-                  }`}
-                  title={shape.name}
-                >
-                  <DotPreview shape={shape.id} />
-                </button>
-              ))}
-            </div>
+            <label className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Dot shape</label>
+            <select
+              value={dotShape}
+              onChange={(e) => setDotShape(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="square">Square</option>
+              <option value="rounded">Rounded</option>
+              <option value="circle">Circle</option>
+            </select>
           </div>
-
-          {/* Marker Border Shape */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
-              Marker border
-            </label>
-            <div className="flex gap-2">
-              {MARKER_BORDER_SHAPES.map((shape) => (
-                <button
-                  key={shape.id}
-                  onClick={() => setMarkerBorderShape(shape.id)}
-                  className={`flex-1 flex items-center justify-center p-3 rounded-lg text-xl transition-all border ${
-                    markerBorderShape === shape.id
-                      ? "bg-gray-900 dark:bg-white border-gray-900 dark:border-white text-white dark:text-gray-900"
-                      : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:border-gray-400"
-                  }`}
-                  title={shape.name}
-                >
-                  <MarkerBorderPreview shape={shape.id} />
-                </button>
-              ))}
-            </div>
+            <label className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Corner border</label>
+            <select
+              value={markerBorderShape}
+              onChange={(e) => setMarkerBorderShape(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="square">Square</option>
+              <option value="rounded">Rounded</option>
+              <option value="circle">Circle</option>
+            </select>
           </div>
-
-          {/* Marker Center Shape */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
-              Marker center
-            </label>
-            <div className="flex gap-2">
-              {MARKER_CENTER_SHAPES.map((shape) => (
-                <button
-                  key={shape.id}
-                  onClick={() => setMarkerCenterShape(shape.id)}
-                  className={`flex-1 flex items-center justify-center p-3 rounded-lg text-xl transition-all border ${
-                    markerCenterShape === shape.id
-                      ? "bg-gray-900 dark:bg-white border-gray-900 dark:border-white text-white dark:text-gray-900"
-                      : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:border-gray-400"
-                  }`}
-                  title={shape.name}
-                >
-                  <MarkerCenterPreview shape={shape.id} />
-                </button>
-              ))}
-            </div>
+            <label className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Corner center</label>
+            <select
+              value={markerCenterShape}
+              onChange={(e) => setMarkerCenterShape(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="square">Square</option>
+              <option value="rounded">Rounded</option>
+              <option value="circle">Circle</option>
+            </select>
           </div>
         </div>
 
-        {/* Colors Row */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Palette size={14} /> QR Color
-            </label>
-            <input
-              type="color"
-              value={fgColor}
-              onChange={(e) => { setFgColor(e.target.value); setActiveTheme(null); }}
-              className="w-full h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
-            />
-            <input
-              type="text"
-              value={fgHex}
-              onChange={(e) => setFgHex(e.target.value)}
-              onBlur={() => {
-                const next = normalizeHex(fgHex);
-                if (next) {
-                  setFgColor(next);
-                  setActiveTheme(null);
-                } else {
-                  setFgHex(fgColor);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
-                }
-              }}
-              className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="#000000"
-            />
+            <label className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"><Palette size={14} /> QR</label>
+            <input type="color" value={fgColor} onChange={(e) => { setFgColor(e.target.value); setActiveTheme(null); }} className="h-10 w-full rounded-lg border border-gray-300 dark:border-gray-600" />
           </div>
-
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Palette size={14} /> Background
-            </label>
-            <input
-              type="color"
-              value={bgColor}
-              onChange={(e) => { setBgColor(e.target.value); setActiveTheme(null); }}
-              className="w-full h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
-            />
-            <input
-              type="text"
-              value={bgHex}
-              onChange={(e) => setBgHex(e.target.value)}
-              onBlur={() => {
-                const next = normalizeHex(bgHex);
-                if (next) {
-                  setBgColor(next);
-                  setActiveTheme(null);
-                } else {
-                  setBgHex(bgColor);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
-                }
-              }}
-              className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="#ffffff"
-            />
+            <label className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"><Palette size={14} /> BG</label>
+            <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setActiveTheme(null); }} className="h-10 w-full rounded-lg border border-gray-300 dark:border-gray-600" />
           </div>
-
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Palette size={14} /> Accent
-            </label>
-            <input
-              type="color"
-              value={accentColor}
-              onChange={(e) => { setAccentColor(e.target.value); setActiveTheme(null); }}
-              className="w-full h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
-            />
-            <input
-              type="text"
-              value={accentHex}
-              onChange={(e) => setAccentHex(e.target.value)}
-              onBlur={() => {
-                const next = normalizeHex(accentHex);
-                if (next) {
-                  setAccentColor(next);
-                  setActiveTheme(null);
-                } else {
-                  setAccentHex(accentColor);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
-                }
-              }}
-              className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="#000000"
-            />
+            <label className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"><Palette size={14} /> Accent</label>
+            <input type="color" value={accentColor} onChange={(e) => { setAccentColor(e.target.value); setActiveTheme(null); }} className="h-10 w-full rounded-lg border border-gray-300 dark:border-gray-600" />
           </div>
         </div>
 
-        {/* Frame & Icon Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Frame size={14} /> Frame Style
-            </label>
+            <label className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Frame</label>
             <select
               value={frameStyle}
               onChange={(e) => setFrameStyle(e.target.value)}
-              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
             >
-              {FRAMES.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
+              <option value="none">None</option>
+              <option value="simple">Simple</option>
+              <option value="rounded">Rounded</option>
+              <option value="double">Double</option>
+              <option value="dashed">Dashed</option>
+              <option value="shadow">Shadow Box (3D)</option>
             </select>
           </div>
-
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <ImageIcon size={14} /> Center Content
-            </label>
+            <label className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Export Background</label>
             <select
-              value={centerIcon}
-              onChange={(e) => setCenterIcon(e.target.value)}
-              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+              value={exportBackground}
+              onChange={(e) => setExportBackground(e.target.value as "white" | "transparent")}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
             >
-              {CENTER_ICONS.map(i => (
-                <option key={i.id} value={i.id}>{i.name}</option>
-              ))}
+              <option value="white">White</option>
+              <option value="transparent">Transparent</option>
             </select>
           </div>
         </div>
-
-        {frameStyle === "shadow" && (
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              Shadow Depth
-            </label>
-            <div className="flex items-center gap-2">
+        {frameStyle !== "none" && (
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Frame thickness</label>
+              <input
+                type="range"
+                min="1"
+                max="12"
+                step="1"
+                value={frameThickness}
+                onChange={(e) => setFrameThickness(Number(e.target.value))}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">{frameThickness}px</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Frame padding</label>
               <input
                 type="range"
                 min="0"
-                max="24"
-                value={shadowDepth}
-                onChange={(e) => setShadowDepth(Number(e.target.value))}
-                className="flex-1 accent-orange-500"
+                max="40"
+                step="1"
+                value={framePadding}
+                onChange={(e) => setFramePadding(Number(e.target.value))}
+                className="w-full"
               />
-              <span className="text-xs text-gray-500 dark:text-gray-400 w-8">{shadowDepth}px</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{framePadding}px</p>
             </div>
-            <label className="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Corner radius</label>
               <input
-                type="checkbox"
-                checked={shadowRounded}
-                onChange={(e) => setShadowRounded(e.target.checked)}
-                className="rounded accent-orange-500"
+                type="range"
+                min="0"
+                max="64"
+                step="1"
+                value={frameRadius}
+                onChange={(e) => setFrameRadius(Number(e.target.value))}
+                className="w-full"
               />
-              Rounded Corners
-            </label>
-          </div>
-        )}
-
-        {/* Custom center text input */}
-        {centerIcon === "custom" && (
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Type size={14} /> Center Text
-            </label>
-            <input
-              type="text"
-              value={centerText}
-              onChange={(e) => setCenterText(e.target.value)}
-              placeholder="e.g., SCAN ME, LOST, REWARD"
-              maxLength={12}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white placeholder-gray-400"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Max 12 characters. Short text works best.</p>
-            <div className="mt-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-                Center Text Size
-              </label>
-              <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{frameRadius}px</p>
+            </div>
+            {frameStyle === "dashed" && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Dash size</label>
                 <input
                   type="range"
-                  min="0.6"
-                  max="1.6"
-                  step="0.05"
-                  value={centerTextSize}
-                  onChange={(e) => setCenterTextSize(Number(e.target.value))}
-                  className="flex-1 accent-orange-500"
+                  min="2"
+                  max="24"
+                  step="1"
+                  value={frameDash}
+                  onChange={(e) => setFrameDash(Number(e.target.value))}
+                  className="w-full"
                 />
-                <span className="text-xs text-gray-500 dark:text-gray-400 w-10">{centerTextSize.toFixed(2)}x</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{frameDash}px</p>
               </div>
-            </div>
-            <div className="mt-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-                Center Text Color
-              </label>
-              <div className="flex items-center gap-2">
+            )}
+            {frameStyle === "shadow" && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Shadow depth</label>
+                <input
+                  type="range"
+                  min="2"
+                  max="24"
+                  step="1"
+                  value={shadowDepth}
+                  onChange={(e) => setShadowDepth(Number(e.target.value))}
+                  className="w-full"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">{shadowDepth}px</p>
+              </div>
+            )}
+            {frameStyle === "shadow" && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Shadow color</label>
                 <input
                   type="color"
-                  value={centerTextColor}
-                  onChange={(e) => {
-                    setCenterTextColor(e.target.value);
-                    setCenterTextColorLocked(false);
-                  }}
-                  className="w-12 h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
+                  value={shadowColor}
+                  onChange={(e) => setShadowColor(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-gray-300 dark:border-gray-600"
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCenterTextColor(accentColor);
-                    setCenterTextColorLocked(true);
-                  }}
-                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                >
-                  Use Accent
-                </button>
               </div>
-              <input
-                type="text"
-                value={centerTextHex}
-                onChange={(e) => setCenterTextHex(e.target.value)}
-                onBlur={() => {
-                  const next = normalizeHex(centerTextHex);
-                  if (next) {
-                    setCenterTextColor(next);
-                    setCenterTextColorLocked(false);
-                  } else {
-                    setCenterTextHex(centerTextColor);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.currentTarget.blur();
-                  }
-                }}
-                className="mt-2 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                placeholder="#000000"
-              />
-            </div>
+            )}
           </div>
         )}
 
-        {/* Center Background Options (only show when center content is enabled) */}
-        {centerIcon !== "none" && (
-          <div className="space-y-3 p-3 bg-gray-100 dark:bg-gray-600 rounded-lg">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide">Center Background</p>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  <Circle size={14} /> Shape
-                </label>
-                <select
-                  value={centerBgShape}
-                  onChange={(e) => setCenterBgShape(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-500 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                >
-                  {CENTER_BG_SHAPES.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  Horizontal Padding
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    value={centerPaddingH}
-                    onChange={(e) => setCenterPaddingH(Number(e.target.value))}
-                    className="flex-1 accent-orange-500"
-                  />
-                  <span className="text-xs text-gray-500 dark:text-gray-400 w-8">{centerPaddingH}px</span>
-                </div>
-              </div>
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  Vertical Padding
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    value={centerPaddingV}
-                    onChange={(e) => setCenterPaddingV(Number(e.target.value))}
-                    className="flex-1 accent-orange-500"
-                  />
-                  <span className="text-xs text-gray-500 dark:text-gray-400 w-8">{centerPaddingV}px</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Gradient toggle */}
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showGradientBg}
-              onChange={(e) => setShowGradientBg(e.target.checked)}
-              className="rounded accent-orange-500"
-            />
-            <span className="text-sm text-gray-600 dark:text-gray-300">Gradient Background</span>
+        <div className="space-y-2">
+          <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <input type="checkbox" checked={showGradientBg} onChange={(e) => setShowGradientBg(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Gradient background
           </label>
           {showGradientBg && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">Angle:</span>
-              <input
-                type="range"
-                min="0"
-                max="360"
-                value={gradientAngle}
-                onChange={(e) => setGradientAngle(Number(e.target.value))}
-                className="w-20 accent-orange-500"
-              />
-              <span className="text-xs text-gray-500 dark:text-gray-400">{gradientAngle}°</span>
+            <div>
+              <input type="range" min="0" max="360" value={gradientAngle} onChange={(e) => setGradientAngle(Number(e.target.value))} className="w-full" />
+              <p className="text-xs text-gray-500 dark:text-gray-400">{gradientAngle}°</p>
             </div>
           )}
         </div>
 
-        {/* Export background */}
-        <div>
-          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Export Background</label>
-          <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="export-bg"
-                value="white"
-                checked={exportBackground === "white"}
-                onChange={() => setExportBackground("white")}
-                className="accent-orange-500"
-              />
-              White
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="export-bg"
-                value="transparent"
-                checked={exportBackground === "transparent"}
-                onChange={() => setExportBackground("transparent")}
-                className="accent-orange-500"
-              />
-              Transparent
-            </label>
-          </div>
-        </div>
-
-        {/* Text Inputs */}
-        <div className="space-y-3">
+        <div className="space-y-2">
+          <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <input type="checkbox" checked={includeLabel} onChange={(e) => setIncludeLabel(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+            Show device name label
+          </label>
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Type size={14} /> Primary Text
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Text padding from frame
             </label>
             <input
-              type="text"
-              value={overlayText}
-              onChange={(e) => setOverlayText(e.target.value)}
-              placeholder="e.g., If found, please scan!"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white placeholder-gray-400"
+              type="range"
+              min="0"
+              max="40"
+              step="1"
+              value={labelPadding}
+              onChange={(e) => setLabelPadding(Number(e.target.value))}
+              className="w-full"
             />
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {labelPadding}px extra spacing
+            </p>
           </div>
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
-              <Type size={14} /> Secondary Text
-            </label>
-            <input
-              type="text"
-              value={secondaryText}
-              onChange={(e) => setSecondaryText(e.target.value)}
-              placeholder="e.g., Reward offered • No questions asked"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-600 text-gray-900 dark:text-white placeholder-gray-400"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-              Primary Text Size
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="0.6"
-                max="2.0"
-                step="0.05"
-                value={primaryTextScale}
-                onChange={(e) => setPrimaryTextScale(Number(e.target.value))}
-                className="flex-1 accent-orange-500"
-              />
-              <span className="text-xs text-gray-500 dark:text-gray-400 w-10">{primaryTextScale.toFixed(2)}x</span>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Primary Text</label>
+          <input value={overlayText} onChange={(e) => setOverlayText(e.target.value)} maxLength={64} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="e.g. I'M LOST" />
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Secondary Text</label>
+          <input value={secondaryText} onChange={(e) => setSecondaryText(e.target.value)} maxLength={96} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="e.g. Help get me home!" />
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Center Text</label>
+          <input value={centerText} onChange={(e) => setCenterText(e.target.value)} maxLength={24} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="e.g. LOST" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"><Type size={14} /> Center color</label>
+              <input type="color" value={centerTextColor} onChange={(e) => setCenterTextColor(e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 dark:border-gray-600" />
+              <button
+                type="button"
+                onClick={() => setCenterTextColor(accentColor)}
+                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Use Accent Color
+              </button>
             </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-              Secondary Text Size
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="0.6"
-                max="2.0"
-                step="0.05"
-                value={secondaryTextScale}
-                onChange={(e) => setSecondaryTextScale(Number(e.target.value))}
-                className="flex-1 accent-orange-500"
-              />
-              <span className="text-xs text-gray-500 dark:text-gray-400 w-10">{secondaryTextScale.toFixed(2)}x</span>
+            <div>
+              <label className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Center size</label>
+              <input type="range" min="0.7" max="2" step="0.1" value={centerTextSize} onChange={(e) => setCenterTextSize(Number(e.target.value))} className="w-full" />
             </div>
           </div>
         </div>
 
-        {/* Include Label */}
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeLabel}
-            onChange={(e) => setIncludeLabel(e.target.checked)}
-            className="rounded accent-orange-500"
-          />
-          <span className="text-sm text-gray-600 dark:text-gray-300">Include device name</span>
-        </label>
-      </div>
-
-      {showThemeSave && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Save as Custom Theme</h3>
-          <div className="flex flex-col md:flex-row gap-3">
-            <input
-              type="text"
-              value={themeName}
-              onChange={(e) => setThemeName(e.target.value)}
-              placeholder="Theme name"
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-            <button
-              type="button"
-              onClick={saveTheme}
-              disabled={savingTheme}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
-            >
-              {savingTheme ? "Saving..." : "Save Theme"}
-            </button>
+        {showThemeSave && (
+          <div className="space-y-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Save as Theme</label>
+            <div className="flex gap-2">
+              <input
+                value={themeName}
+                onChange={(e) => setThemeName(e.target.value)}
+                placeholder="Theme name"
+                className="h-10 flex-1 rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              />
+              <button
+                onClick={saveTheme}
+                disabled={savingTheme}
+                className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+              >
+                <Save size={15} /> {savingTheme ? "Saving" : "Save"}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-        </div>
+        )}
+      </section>
     </div>
   );
 }
