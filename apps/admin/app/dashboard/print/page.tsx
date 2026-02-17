@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import QRCode from "qrcode";
 import { ArrowLeft, Printer, Trash2, Plus, Move, Maximize2, Save, FolderOpen, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "@shared/components/theme-toggle";
-import { generateStyledQrDataUrl, type SavedQrSettings } from "@shared/lib/qr-render";
+import { type SavedQrSettings } from "@shared/lib/qr-render";
+import { generateStyledQrSvg } from "@shared/lib/qr-svg";
 
 type Device = {
   id: string;
@@ -47,7 +47,7 @@ type LayoutItem = {
   w: number;
   h: number;
   page: number;
-  qrDataUrl: string;
+  qrSvg: string;
 };
 
 type InteractionMode = "drag" | "resize";
@@ -113,7 +113,7 @@ function buildDefaultLayout(devices: Device[], qrByDeviceId: Record<string, stri
       deviceId: device.id,
       name: device.name,
       uniqueCode: device.uniqueCode,
-      qrDataUrl: qrByDeviceId[device.id] ?? "",
+      qrSvg: qrByDeviceId[device.id] ?? "",
       page,
       x: xStart + col * (cardW + xGap),
       y: yStart + row * (cardH + yGap),
@@ -344,21 +344,12 @@ export default function PrintLayoutPage() {
       const qrEntries = await Promise.all(
         list.map(async (device) => {
           const deviceUrl = `${effectiveBase}/device/${device.uniqueCode}`;
-          let qrDataUrl: string;
-          try {
-            qrDataUrl = await generateStyledQrDataUrl({
-              url: deviceUrl,
-              deviceName: device.name,
-              settings: device.qrSettings ?? null,
-            });
-          } catch {
-            qrDataUrl = await QRCode.toDataURL(deviceUrl, {
-              width: 900,
-              margin: 1,
-              errorCorrectionLevel: "H",
-            });
-          }
-          return [device.id, qrDataUrl] as const;
+          const qrSvg = await generateStyledQrSvg({
+            url: deviceUrl,
+            deviceName: device.name,
+            settings: device.qrSettings ?? null,
+          });
+          return [device.id, qrSvg] as const;
         })
       );
 
@@ -403,15 +394,15 @@ export default function PrintLayoutPage() {
   };
 
   const addDeviceToPage = (device: Device) => {
-    const qrDataUrl = qrByDeviceId[device.id];
-    if (!qrDataUrl) return;
+    const qrSvg = qrByDeviceId[device.id];
+    if (!qrSvg) return;
 
     const newItem: LayoutItem = {
       id: uid(),
       deviceId: device.id,
       name: device.name,
       uniqueCode: device.uniqueCode,
-      qrDataUrl,
+      qrSvg,
       page: activePage,
       x: 4,
       y: 4,
@@ -479,7 +470,7 @@ export default function PrintLayoutPage() {
           deviceId: device.id,
           name: device.name,
           uniqueCode: device.uniqueCode,
-          qrDataUrl: qr,
+          qrSvg: qr,
           x: clamp(it.x, 0, 100 - MIN_SIZE),
           y: clamp(it.y, 0, 100 - MIN_SIZE),
           w: clamp(it.w, MIN_SIZE, 100),
@@ -867,11 +858,9 @@ export default function PrintLayoutPage() {
                           </div>
 
                           <div className="h-full w-full">
-                            <img
-                              src={item.qrDataUrl}
-                              alt={`QR for ${item.name}`}
-                              className="w-full h-full object-contain"
-                              draggable={false}
+                            <div
+                              className="print-svg h-full w-full [&_svg]:h-full [&_svg]:w-full"
+                              dangerouslySetInnerHTML={{ __html: item.qrSvg }}
                             />
                           </div>
 
@@ -912,10 +901,23 @@ export default function PrintLayoutPage() {
             margin: 0;
           }
 
+          html,
           body {
+            width: 8.5in;
             margin: 0;
+            padding: 0;
+            overflow: visible !important;
             print-color-adjust: exact;
             -webkit-print-color-adjust: exact;
+          }
+
+          body * {
+            visibility: hidden;
+          }
+
+          .print-root,
+          .print-root * {
+            visibility: visible;
           }
 
           .no-print {
@@ -923,10 +925,30 @@ export default function PrintLayoutPage() {
           }
 
           .print-root {
+            position: absolute;
+            left: 0;
+            top: 0;
             width: 8.5in;
             margin: 0;
             padding: 0;
+            display: block !important;
             gap: 0 !important;
+          }
+
+          .page-shell {
+            display: block !important;
+            width: 8.5in !important;
+            height: 11in !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            page-break-after: always;
+            break-after: page;
+            overflow: hidden !important;
+          }
+
+          .page-shell:last-child {
+            page-break-after: auto;
+            break-after: auto;
           }
 
           .print-page {
@@ -935,23 +957,23 @@ export default function PrintLayoutPage() {
             border: none !important;
             box-shadow: none !important;
             margin: 0 !important;
-            page-break-after: always;
-            break-after: page;
-          }
-
-          .print-page:last-child {
-            page-break-after: auto;
-            break-after: auto;
+            overflow: hidden !important;
+            opacity: 1 !important;
           }
 
           .print-item {
             break-inside: avoid;
             border: none !important;
             background: transparent !important;
+            overflow: hidden !important;
           }
 
-          .page-shell {
-            margin: 0 !important;
+          .print-svg,
+          .print-svg svg {
+            width: 100% !important;
+            height: 100% !important;
+            display: block !important;
+            overflow: hidden !important;
           }
         }
       `}</style>

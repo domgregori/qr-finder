@@ -189,18 +189,6 @@ export default function DeviceQRPage() {
                 <p className="mt-2 text-xs text-green-700 dark:text-green-400 break-all">{publicPortalUrl}</p>
               </div>
             )}
-
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-900/20">
-              <div className="flex items-center gap-2">
-                <Palette size={18} className="text-blue-700 dark:text-blue-300" />
-                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">SVG-first workflow</h3>
-              </div>
-              <ol className="mt-3 space-y-1.5 text-xs text-blue-800 dark:text-blue-200">
-                <li>1. Adjust style in the panel on the right.</li>
-                <li>2. Export SVG for best print quality.</li>
-                <li>3. Use PNG only when a raster image is required.</li>
-              </ol>
-            </div>
           </aside>
 
           <section className="rounded-2xl border border-gray-200 bg-white/90 p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800/80">

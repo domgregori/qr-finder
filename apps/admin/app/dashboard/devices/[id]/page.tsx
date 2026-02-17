@@ -673,9 +673,19 @@ export default function DeviceDetailPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                      <Smartphone size={20} className="text-blue-600 dark:text-blue-400" />
-                    </div>
+                    {device?.photoDisplayUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setActiveImageUrl(device.photoDisplayUrl ?? null)}
+                        className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <img src={device.photoDisplayUrl} alt={device?.name ?? "Device"} className="w-full h-full object-cover" />
+                      </button>
+                    ) : (
+                      <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                        <Smartphone size={20} className="text-blue-600 dark:text-blue-400" />
+                      </div>
+                    )}
                     <div>
                       <p className="font-medium text-gray-900 dark:text-white">{device?.name ?? ""}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">Code: {device?.uniqueCode ?? ""}</p>

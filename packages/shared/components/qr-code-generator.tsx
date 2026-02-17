@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { Check, Download, FileImage, FileType2, Palette, Save, Settings, Type } from "lucide-react";
 import { toast } from "sonner";
+import { generateStyledQrSvg } from "@shared/lib/qr-svg";
 
 interface QRCodeGeneratorProps {
   url: string;
@@ -102,14 +102,6 @@ const DEFAULT_SETTINGS: QrSettings = {
   shadowRounded: false,
   exportBackground: "white",
 };
-
-const escapeXml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
 
 const sanitizeFileName = (value: string) => {
   const normalized = value.trim().replace(/\s+/g, "_");
@@ -291,148 +283,12 @@ export function QRCodeGenerator({
     };
   }, [settings, onSettingsChange]);
 
-  const isMarkerCell = (row: number, col: number, moduleCount: number) => {
-    const inTopLeft = row >= 0 && row <= 6 && col >= 0 && col <= 6;
-    const inTopRight = row >= 0 && row <= 6 && col >= moduleCount - 7 && col <= moduleCount - 1;
-    const inBottomLeft = row >= moduleCount - 7 && row <= moduleCount - 1 && col >= 0 && col <= 6;
-    return inTopLeft || inTopRight || inBottomLeft;
-  };
-
-  const markerRingSvg = (x: number, y: number) => {
-    if (markerBorderShape === "circle") {
-      const cx = x + 3.5;
-      const cy = y + 3.5;
-      return `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${escapeXml(fgColor)}"/><circle cx="${cx}" cy="${cy}" r="2.5" fill="${escapeXml(bgColor)}"/>`;
-    }
-    if (markerBorderShape === "rounded") {
-      return `<rect x="${x}" y="${y}" width="7" height="7" rx="1.2" ry="1.2" fill="${escapeXml(fgColor)}"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" rx="0.7" ry="0.7" fill="${escapeXml(bgColor)}"/>`;
-    }
-    return `<rect x="${x}" y="${y}" width="7" height="7" fill="${escapeXml(fgColor)}"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="${escapeXml(bgColor)}"/>`;
-  };
-
-  const markerCenterSvg = (x: number, y: number) => {
-    if (markerCenterShape === "circle") {
-      return `<circle cx="${x + 3.5}" cy="${y + 3.5}" r="1.5" fill="${escapeXml(fgColor)}"/>`;
-    }
-    if (markerCenterShape === "rounded") {
-      return `<rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="0.7" ry="0.7" fill="${escapeXml(fgColor)}"/>`;
-    }
-    return `<rect x="${x + 2}" y="${y + 2}" width="3" height="3" fill="${escapeXml(fgColor)}"/>`;
-  };
-
-  const drawDot = (x: number, y: number) => {
-    if (dotShape === "circle") {
-      return `<circle cx="${x + 0.5}" cy="${y + 0.5}" r="0.42" fill="${escapeXml(fgColor)}"/>`;
-    }
-    if (dotShape === "rounded") {
-      return `<rect x="${x + 0.05}" y="${y + 0.05}" width="0.9" height="0.9" rx="0.26" ry="0.26" fill="${escapeXml(fgColor)}"/>`;
-    }
-    return `<rect x="${x + 0.05}" y="${y + 0.05}" width="0.9" height="0.9" fill="${escapeXml(fgColor)}"/>`;
-  };
-
   const buildStyledSvg = async () => {
-    const qr = QRCode.create(url, { errorCorrectionLevel: qrLevel });
-    const modules = qr.modules;
-    const moduleCount = modules.size;
-    const margin = 1;
-    const qrView = moduleCount + margin * 2;
-
-    const markerPositions = [
-      { x: margin, y: margin },
-      { x: margin + moduleCount - 7, y: margin },
-      { x: margin, y: margin + moduleCount - 7 },
-    ];
-
-    const markerSvg = markerPositions
-      .map((pos) => `${markerRingSvg(pos.x, pos.y)}${markerCenterSvg(pos.x, pos.y)}`)
-      .join("");
-
-    let dotSvg = "";
-    for (let row = 0; row < moduleCount; row++) {
-      for (let col = 0; col < moduleCount; col++) {
-        if (modules.get(row, col) !== 1) continue;
-        if (isMarkerCell(row, col, moduleCount)) continue;
-        dotSvg += drawDot(margin + col, margin + row);
-      }
-    }
-    const qrInner = `${markerSvg}${dotSvg}`;
-
-    const padding = 28;
-    const qrSize = size;
-    const frameStroke = frameStyle === "none" ? 0 : Math.max(1, frameThickness);
-    const effectiveFrameRadius = frameStyle === "none" ? 0 : Math.max(0, frameRadius);
-    const effectiveFramePadding = frameStyle === "none" ? 0 : Math.max(0, framePadding);
-
-    const primarySize = Math.max(12, size / 16) * primaryTextScale;
-    const secondarySize = Math.max(10, size / 20) * secondaryTextScale;
-
-    const labelCount =
-      (includeLabel ? 1 : 0) +
-      (overlayText.trim() ? 1 : 0) +
-      (secondaryText.trim() ? 1 : 0);
-
-    const labelBlockHeight = labelCount === 0 ? 0 : 18 + (includeLabel ? primarySize + 6 : 0) + (overlayText.trim() ? primarySize + 4 : 0) + (secondaryText.trim() ? secondarySize + 4 : 0);
-
-    const width = qrSize + (padding + effectiveFramePadding) * 2;
-    const qrTop = padding + effectiveFramePadding;
-    const qrLeft = padding + effectiveFramePadding;
-    const qrBottom = qrTop + qrSize;
-    const height = qrBottom + labelBlockHeight + padding;
-
-    const backgroundFill = showGradientBg
-      ? `url(#qrf-gradient)`
-      : exportBackground === "transparent"
-        ? "transparent"
-        : bgColor;
-
-    const frameStrokeDash = frameStyle === "dashed" ? ` stroke-dasharray="${Math.max(2, frameDash)} ${Math.max(2, frameDash)}"` : "";
-    const shadowOffset = frameStyle === "shadow" ? Math.max(2, shadowDepth) : 0;
-    const shadowOpacity = frameStyle === "shadow" ? 1 : 0;
-
-    const centerTextTrimmed = centerText.trim();
-    const centerTextEnabled = centerTextTrimmed.length > 0;
-    const centerFontSize = Math.max(10, size / 14) * centerTextSize;
-    const centerBoxW = Math.max(64, centerTextTrimmed.length * (centerFontSize * 0.58) + 20);
-    const centerBoxH = Math.max(28, centerFontSize + 12);
-    const centerBoxX = qrLeft + qrSize / 2 - centerBoxW / 2;
-    const centerBoxY = qrTop + qrSize / 2 - centerBoxH / 2;
-
-    const frameOffset = frameStyle === "none" ? 0 : effectiveFramePadding;
-    const labelTopGap = 16 + frameOffset + Math.max(0, labelPadding);
-    let labelY = qrBottom + labelTopGap;
-    let labelSvg = "";
-
-    if (includeLabel) {
-      labelSvg += `<text x="${width / 2}" y="${labelY}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="700" font-size="${Math.round(primarySize)}" fill="${escapeXml(fgColor)}">${escapeXml(deviceName)}</text>`;
-      labelY += primarySize + 8;
-    }
-    if (overlayText.trim()) {
-      labelSvg += `<text x="${width / 2}" y="${labelY}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="700" font-size="${Math.round(primarySize)}" fill="${escapeXml(accentColor)}">${escapeXml(overlayText.trim())}</text>`;
-      labelY += primarySize + 6;
-    }
-    if (secondaryText.trim()) {
-      labelSvg += `<text x="${width / 2}" y="${labelY}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="500" font-size="${Math.round(secondarySize)}" fill="${escapeXml(fgColor)}" opacity="0.9">${escapeXml(secondaryText.trim())}</text>`;
-    }
-
-    return `
-<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(width)}" height="${Math.round(height)}" viewBox="0 0 ${Math.round(width)} ${Math.round(height)}">
-  <defs>
-    <linearGradient id="qrf-gradient" x1="0%" y1="0%" x2="100%" y2="100%" gradientTransform="rotate(${Math.round(gradientAngle)}, .5, .5)">
-      <stop offset="0%" stop-color="${escapeXml(bgColor)}"/>
-      <stop offset="100%" stop-color="${escapeXml(accentColor)}" stop-opacity="0.25"/>
-    </linearGradient>
-  </defs>
-  <rect x="0" y="0" width="100%" height="100%" fill="${backgroundFill}"/>
-  ${frameStyle === "none" ? "" : frameStyle === "shadow"
-      ? `<rect x="${qrLeft - effectiveFramePadding + shadowOffset}" y="${qrTop - effectiveFramePadding + shadowOffset}" width="${qrSize + effectiveFramePadding * 2}" height="${qrSize + effectiveFramePadding * 2}" rx="${effectiveFrameRadius}" ry="${effectiveFrameRadius}" fill="${escapeXml(shadowColor)}" opacity="${shadowOpacity}"/><rect x="${qrLeft - effectiveFramePadding}" y="${qrTop - effectiveFramePadding}" width="${qrSize + effectiveFramePadding * 2}" height="${qrSize + effectiveFramePadding * 2}" rx="${effectiveFrameRadius}" ry="${effectiveFrameRadius}" fill="${escapeXml(bgColor)}" stroke="${escapeXml(accentColor)}" stroke-width="${frameStroke}"/>`
-      : `<rect x="${qrLeft - effectiveFramePadding}" y="${qrTop - effectiveFramePadding}" width="${qrSize + effectiveFramePadding * 2}" height="${qrSize + effectiveFramePadding * 2}" rx="${effectiveFrameRadius}" ry="${effectiveFrameRadius}" fill="none" stroke="${escapeXml(accentColor)}" stroke-width="${frameStroke}"${frameStrokeDash}/>`
-    }
-  <g transform="translate(${qrLeft},${qrTop}) scale(${qrSize / qrView})">
-    ${qrInner}
-  </g>
-  ${centerTextEnabled ? `<rect x="${centerBoxX}" y="${centerBoxY}" width="${centerBoxW}" height="${centerBoxH}" rx="${Math.round(centerBoxH * 0.25)}" ry="${Math.round(centerBoxH * 0.25)}" fill="${escapeXml(bgColor)}"/><text x="${qrLeft + qrSize / 2}" y="${qrTop + qrSize / 2 + centerFontSize * 0.35}" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI" font-weight="700" font-size="${Math.round(centerFontSize)}" fill="${escapeXml(centerTextColor)}">${escapeXml(centerTextTrimmed)}</text>` : ""}
-  ${labelSvg}
-</svg>`.trim();
+    return generateStyledQrSvg({
+      url,
+      deviceName,
+      settings,
+    });
   };
 
   useEffect(() => {
@@ -594,12 +450,9 @@ export function QRCodeGenerator({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <section className="self-start rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900 lg:sticky lg:top-24">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Live SVG Preview</h3>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-            Vector Output
-          </span>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">QR Preview</h3>
         </div>
 
         <div className="overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
@@ -614,19 +467,19 @@ export function QRCodeGenerator({
             onClick={downloadSvg}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
           >
-            <FileType2 size={16} /> Download SVG
+            <FileType2 size={16} /> SVG
           </button>
           <button
             onClick={downloadPng}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-medium text-white hover:bg-black dark:bg-gray-700 dark:hover:bg-gray-600"
           >
-            <FileImage size={16} /> Download PNG
+            <FileImage size={16} /> PNG
           </button>
           <button
             onClick={copySvgToClipboard}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           >
-            {copiedSvg ? <Check size={16} /> : <Download size={16} />} {copiedSvg ? "Copied" : "Copy SVG"}
+            {copiedSvg ? <Check size={16} /> : <Download size={16} />} {copiedSvg ? "Copied" : "Copy"}
           </button>
         </div>
       </section>
@@ -634,7 +487,6 @@ export function QRCodeGenerator({
       <section className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <div>
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">QR Settings</h3>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Designed to produce clean SVG exports first, with optional PNG output.</p>
         </div>
 
         <div className="space-y-3">
@@ -915,21 +767,19 @@ export function QRCodeGenerator({
         {showThemeSave && (
           <div className="space-y-2 border-t border-gray-200 pt-4 dark:border-gray-700">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Save as Theme</label>
-            <div className="flex gap-2">
-              <input
-                value={themeName}
-                onChange={(e) => setThemeName(e.target.value)}
-                placeholder="Theme name"
-                className="h-10 flex-1 rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-              />
-              <button
-                onClick={saveTheme}
-                disabled={savingTheme}
-                className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-              >
-                <Save size={15} /> {savingTheme ? "Saving" : "Save"}
-              </button>
-            </div>
+            <input
+              value={themeName}
+              onChange={(e) => setThemeName(e.target.value)}
+              placeholder="Theme name"
+              className="h-10 flex-1 rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            />
+            <button
+              onClick={saveTheme}
+              disabled={savingTheme}
+              className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingTheme ? "Saving" : "Save"}
+            </button>
           </div>
         )}
       </section>
