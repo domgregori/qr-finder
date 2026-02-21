@@ -33,6 +33,7 @@ services:
       - "${NTFY_EXTRA_HOSTS:-}"
     volumes:
       - ./uploads:/apps/uploads
+
     depends_on:
       db:
         condition: service_healthy

@@ -12,11 +12,8 @@ COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/admin-public-combined/package.json ./packages/admin-public-combined/package.json
 COPY prisma ./prisma/
 
-RUN npm config set fetch-retries 10 \
-    && npm config set fetch-retry-mintimeout 20000 \
-    && npm config set fetch-retry-maxtimeout 120000 \
-    && npm install --include=dev --no-audit --no-fund \
-    && test -x node_modules/.bin/next
+RUN npm install --include=dev --no-audit --no-fund \
+  && test -x node_modules/.bin/next
 
 FROM base AS builder
 ARG APP_DIR=apps/admin
