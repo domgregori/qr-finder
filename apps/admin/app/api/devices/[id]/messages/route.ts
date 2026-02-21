@@ -75,33 +75,11 @@ export async function POST(
 
     const session = await getServerSession(authOptions);
     const body = await req.json();
-    const { nickname: rawNickname, message: rawMessage, turnstileToken } = body ?? {};
+    const { nickname: rawNickname, message: rawMessage } = body ?? {};
 
     // Sanitize inputs
     const nickname = sanitizeNickname(rawNickname);
     const message = sanitizeMessage(rawMessage);
-
-    // Verify Turnstile token for public messages
-    if (!session && turnstileToken) {
-      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
-      if (turnstileSecret) {
-        const verifyRes = await fetch(
-          "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: `secret=${turnstileSecret}&response=${turnstileToken}`
-          }
-        );
-        const verification = await verifyRes.json();
-        if (!verification?.success) {
-          return NextResponse.json(
-            { error: "Captcha verification failed" },
-            { status: 400 }
-          );
-        }
-      }
-    }
 
     if (!nickname || !message) {
       return NextResponse.json(

@@ -14,8 +14,6 @@ services:
       - DATABASE_URL=postgresql://lostfound:${POSTGRES_PASSWORD:-changeme}@db:5432/lostfound
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
-      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
       - PUBLIC_PORTAL_URL=${PUBLIC_PORTAL_URL:-}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@lostfound.local}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
@@ -53,8 +51,6 @@ services:
       - PUBLIC_DB_PASSWORD=${PUBLIC_DB_PASSWORD:-public_app_password}
       - DATABASE_URL=${PUBLIC_DATABASE_URL:-postgresql://public_app:${PUBLIC_DB_PASSWORD:-public_app_password}@db:5432/lostfound}
       - NEXTAUTH_URL=${PUBLIC_PORTAL_URL:-http://localhost:3001}
-      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
-      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
       - ADMIN_INTERNAL_URL=${ADMIN_INTERNAL_URL:-http://admin:3000}
       - INTERNAL_NOTIFY_SECRET=${INTERNAL_NOTIFY_SECRET:-}
       - STORAGE_TYPE=${STORAGE_TYPE:-local}

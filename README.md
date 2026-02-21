@@ -13,7 +13,6 @@ Concept piece. Hasn't had a security review.
 - **QR Code Generator**: Customizable QR codes (colors, sizes, text overlays, module shapes)
 - **Apprise Notifications**: Get instant alerts via 80+ services (Telegram, Discord, ntfy, etc.)
 - **Public Message Board**: Finders can leave messages without creating accounts
-- **Cloudflare Turnstile**: Optional spam protection for public forms
 - **Photo Uploads**: Attach photos to help identify devices
 - **Light/Dark Mode**: Full theme support across all pages
 - **Self-Host Friendly**: Local file storage, included PostgreSQL, minimal dependencies
@@ -179,22 +178,6 @@ QR Finder uses [Apprise](https://github.com/caronc/apprise) URLs for notificatio
 | Slack    | `slack://TokenA/TokenB/TokenC`                      |
 
 See the [Apprise Wiki](https://github.com/caronc/apprise/wiki) for 80+ more services.
-
-### Spam Protection (Optional)
-
-Cloudflare Turnstile provides captcha protection for the public message form.
-
-1. Get keys from [Cloudflare Turnstile](https://dash.cloudflare.com/turnstile)
-2. Add to .env:
-
-```bash
-NEXT_PUBLIC_TURNSTILE_SITE_KEY=your-site-key
-TURNSTILE_SECRET_KEY=your-secret-key
-```
-
-If not configured, the form will work without captcha.
-
----
 
 ## Exposing to the Internet
 
@@ -380,11 +363,6 @@ npm run dev
 | `NEXTAUTH_URL`                   | Yes       | -           | Your app's public URL                |
 | `NEXTAUTH_SECRET`                | Yes       | -           | Session encryption secret            |
 | `STORAGE_TYPE`                   | No        | `local`     | Local file storage                   |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No        | -           | Cloudflare Turnstile site key        |
-| `TURNSTILE_SECRET_KEY`           | No        | -           | Cloudflare Turnstile secret          |
-
----
-
 ## Backup & Restore
 
 ### Database Backup
@@ -432,7 +410,6 @@ docker compose exec admin npx prisma db push
 - **Styling**: Tailwind CSS + shadcn/ui
 - **QR Generation**: qrcode library
 - **File Storage**: Local filesystem
-- **Captcha**: Cloudflare Turnstile (optional)
 - **Notifications**: Apprise-compatible URLs
 
 ---

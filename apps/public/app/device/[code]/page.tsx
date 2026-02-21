@@ -7,7 +7,6 @@ import {
   MapPin, MessageCircle, Send, User, Clock, AlertCircle,
   CheckCircle, Smartphone, AlertTriangle
 } from "lucide-react";
-import { Turnstile } from "@shared/components/turnstile";
 import { ThemeToggle } from "@shared/components/theme-toggle";
 
 interface Message {
@@ -43,16 +42,11 @@ export default function PublicDevicePage() {
   // Message form state
   const [nickname, setNickname] = useState("");
   const [message, setMessage] = useState("");
-  const [turnstileToken, setTurnstileToken] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState("");
   const [language, setLanguage] = useState<"en" | "es">("en");
   const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
-
-  const turnstileSiteKey = typeof window !== "undefined" 
-    ? (window as any).__TURNSTILE_SITE_KEY ?? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""
-    : "";
 
   const copyByLang = {
     en: {
@@ -200,8 +194,7 @@ export default function PublicDevicePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nickname: nickname.trim(),
-          message: message.trim(),
-          turnstileToken
+          message: message.trim()
         })
       });
 
@@ -413,14 +406,6 @@ export default function PublicDevicePage() {
                 required
               />
             </div>
-
-            {turnstileSiteKey && (
-              <Turnstile
-                siteKey={turnstileSiteKey}
-                onVerify={setTurnstileToken}
-                onError={() => setFormError("Captcha failed. Please refresh and try again.")}
-              />
-            )}
 
             <button
               type="submit"
