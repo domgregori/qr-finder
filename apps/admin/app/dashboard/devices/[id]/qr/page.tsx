@@ -99,6 +99,7 @@ export default function DeviceQRPage() {
   // Use PUBLIC_PORTAL_URL if set, otherwise fall back to current origin
   const effectiveBaseUrl = publicPortalUrl || baseUrl;
   const deviceUrl = `${effectiveBaseUrl}/device/${device?.uniqueCode ?? ""}`;
+  const previewUrl = `${deviceUrl}?preview=1`;
   const isUsingPublicPortal = !!publicPortalUrl && publicPortalUrl !== baseUrl;
 
   const copyUrl = async () => {
@@ -175,6 +176,15 @@ export default function DeviceQRPage() {
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
                   <ExternalLink size={16} /> Open
+                </Link>
+              </div>
+              <div className="mt-2">
+                <Link
+                  href={previewUrl}
+                  target="_blank"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                >
+                  <Palette size={16} /> Preview Public Page (No Notify)
                 </Link>
               </div>
             </div>

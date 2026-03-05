@@ -18,6 +18,7 @@ export async function POST(
   }
 
   try {
+    const previewMode = new URL(req.url).searchParams.get("preview") === "1";
     const resolvedParams = await params;
     const code = resolvedParams?.code ?? "";
 
@@ -59,10 +60,10 @@ export async function POST(
       }
     });
 
-    // Notify admin app to send Apprise notifications (keeps endpoints private)
+    // Skip notifications for preview mode.
     const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
     const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
-    if (internalSecret) {
+    if (!previewMode && internalSecret) {
       try {
         await fetch(`${adminNotifyUrl}/api/internal/notify`, {
           method: "POST",

@@ -445,13 +445,21 @@ export default function AccountPage() {
               {themes.map((theme) => (
                 <div key={theme.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
                   <span className="text-sm text-gray-800 dark:text-gray-200">{theme.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => deleteTheme(theme.id)}
-                    className="text-sm text-red-600 dark:text-red-400 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/dashboard/themes/${theme.id}`}
+                      className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => deleteTheme(theme.id)}
+                      className="text-sm text-red-600 dark:text-red-400 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

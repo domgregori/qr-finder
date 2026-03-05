@@ -37,6 +37,12 @@ type SavedLayout = {
   updatedAt: string;
 };
 
+type Theme = {
+  id: string;
+  name: string;
+  settings: SavedQrSettings;
+};
+
 type LayoutItem = {
   id: string;
   deviceId: string;
@@ -52,6 +58,13 @@ type LayoutItem = {
 
 type InteractionMode = "drag" | "resize";
 
+type DragSnapshotItem = {
+  id: string;
+  x: number;
+  y: number;
+  page: number;
+};
+
 type InteractionState = {
   itemId: string;
   mode: InteractionMode;
@@ -62,6 +75,9 @@ type InteractionState = {
   startItemY: number;
   startItemW: number;
   startItemH: number;
+  pointerOffsetX: number;
+  pointerOffsetY: number;
+  dragSnapshot?: DragSnapshotItem[];
 };
 
 type GuideState = {
@@ -200,7 +216,7 @@ export default function PrintLayoutPage() {
   const [qrByDeviceId, setQrByDeviceId] = useState<Record<string, string>>({});
 
   const [layoutItems, setLayoutItems] = useState<LayoutItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activePage, setActivePage] = useState(0);
 
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -210,10 +226,14 @@ export default function PrintLayoutPage() {
   const [savedLayouts, setSavedLayouts] = useState<SavedLayout[]>([]);
   const [selectedLayoutId, setSelectedLayoutId] = useState<string>("");
   const [layoutName, setLayoutName] = useState("");
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [selectedThemeId, setSelectedThemeId] = useState<string>("");
+  const [globalQrSizeInches, setGlobalQrSizeInches] = useState<string>("2");
+  const [pageCount, setPageCount] = useState(1);
 
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  const pageCount = useMemo(() => {
+  const computedPageCount = useMemo(() => {
     if (layoutItems.length === 0) return 1;
     return Math.max(...layoutItems.map((item) => item.page)) + 1;
   }, [layoutItems]);
@@ -222,6 +242,8 @@ export default function PrintLayoutPage() {
     const placed = new Set(layoutItems.map((item) => item.deviceId));
     return devices.filter((device) => !placed.has(device.id));
   }, [devices, layoutItems]);
+
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -242,6 +264,12 @@ export default function PrintLayoutPage() {
   }, [status]);
 
   useEffect(() => {
+    if (pageCount < computedPageCount) {
+      setPageCount(computedPageCount);
+    }
+  }, [computedPageCount, pageCount]);
+
+  useEffect(() => {
     if (activePage > pageCount - 1) {
       setActivePage(Math.max(0, pageCount - 1));
     }
@@ -251,27 +279,51 @@ export default function PrintLayoutPage() {
     if (!interaction) return;
 
     const onMouseMove = (event: MouseEvent) => {
-      const pageEl = pageRefs.current[interaction.page];
+      const pageEntries = Object.entries(pageRefs.current)
+        .map(([k, el]) => ({ page: Number(k), el }))
+        .filter((entry): entry is { page: number; el: HTMLDivElement } => Boolean(entry.el));
+      if (pageEntries.length === 0) return;
+
+      const hovered = pageEntries.find(({ el }) => {
+        const r = el.getBoundingClientRect();
+        return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+      });
+      const targetPage = hovered?.page ?? interaction.page;
+      const pageEl = pageRefs.current[interaction.mode === "resize" ? interaction.page : targetPage];
       if (!pageEl) return;
 
       const rect = pageEl.getBoundingClientRect();
-      const dxPct = ((event.clientX - interaction.startX) / rect.width) * 100;
-      const dyPct = ((event.clientY - interaction.startY) / rect.height) * 100;
 
       setLayoutItems((prev) => {
+        const snapshotMap = new Map((interaction.dragSnapshot ?? []).map((entry) => [entry.id, entry]));
+        const leadItem = prev.find((entry) => entry.id === interaction.itemId);
         const next = prev.map((item) => {
-          if (item.id !== interaction.itemId) return item;
-
           if (interaction.mode === "drag") {
-            let nextX = clamp(interaction.startItemX + dxPct, 0, 100 - item.w);
-            let nextY = clamp(interaction.startItemY + dyPct, 0, 100 - item.h);
+            const pointerX = ((event.clientX - rect.left) / rect.width) * 100;
+            const pointerY = ((event.clientY - rect.top) / rect.height) * 100;
+            const leadSnapshot = snapshotMap.get(interaction.itemId);
+            if (!leadSnapshot || !leadItem) return item;
+
+            let leadX = clamp(pointerX - interaction.pointerOffsetX, 0, 100 - leadItem.w);
+            let leadY = clamp(pointerY - interaction.pointerOffsetY, 0, 100 - leadItem.h);
             if (snapEnabled) {
-              nextX = clamp(snap(nextX, GRID_X), 0, 100 - item.w);
-              nextY = clamp(snap(nextY, GRID_Y), 0, 100 - item.h);
+              leadX = clamp(snap(leadX, GRID_X), 0, 100 - leadItem.w);
+              leadY = clamp(snap(leadY, GRID_Y), 0, 100 - leadItem.h);
             }
-            return { ...item, x: nextX, y: nextY };
+
+            const dx = leadX - leadSnapshot.x;
+            const dy = leadY - leadSnapshot.y;
+            const currentSnapshot = snapshotMap.get(item.id);
+            if (!currentSnapshot) return item;
+
+            const nextX = clamp(currentSnapshot.x + dx, 0, 100 - item.w);
+            const nextY = clamp(currentSnapshot.y + dy, 0, 100 - item.h);
+            return { ...item, page: targetPage, x: nextX, y: nextY };
           }
 
+          if (item.id !== interaction.itemId) return item;
+          const dxPct = ((event.clientX - interaction.startX) / rect.width) * 100;
+          const dyPct = ((event.clientY - interaction.startY) / rect.height) * 100;
           let nextW = clamp(interaction.startItemW + dxPct, MIN_SIZE, 100 - item.x);
           let nextH = clamp(interaction.startItemH + dyPct, MIN_SIZE, 100 - item.y);
           if (snapEnabled) {
@@ -283,7 +335,8 @@ export default function PrintLayoutPage() {
 
         const current = next.find((item) => item.id === interaction.itemId);
         if (current) {
-          const peers = next.filter((item) => item.id !== interaction.itemId && item.page === current.page);
+          const draggedIds = new Set((interaction.dragSnapshot ?? []).map((entry) => entry.id));
+          const peers = next.filter((item) => !draggedIds.has(item.id) && item.page === current.page);
           const g = computeGuides(current, peers);
           setGuides({ page: current.page, v: g.v, h: g.h });
         }
@@ -309,10 +362,11 @@ export default function PrintLayoutPage() {
   const initialize = async () => {
     setLoading(true);
     try {
-      const [configRes, devicesRes, layoutsRes] = await Promise.all([
+      const [configRes, devicesRes, layoutsRes, themesRes] = await Promise.all([
         fetch("/api/config"),
         fetch("/api/devices"),
         fetch("/api/print-layouts"),
+        fetch("/api/qr-themes"),
       ]);
 
       let portal = "";
@@ -357,11 +411,17 @@ export default function PrintLayoutPage() {
       setDevices(list);
       setDeviceMap(map);
       setQrByDeviceId(qrMap);
-      setLayoutItems(buildDefaultLayout(list, qrMap));
+      const defaults = buildDefaultLayout(list, qrMap);
+      setLayoutItems(defaults);
+      setPageCount(Math.max(1, ...defaults.map((item) => item.page + 1)));
 
       if (layoutsRes.ok) {
         const layouts = await layoutsRes.json();
         setSavedLayouts((layouts ?? []) as SavedLayout[]);
+      }
+      if (themesRes.ok) {
+        const loadedThemes = (await themesRes.json()) as Theme[];
+        setThemes(Array.isArray(loadedThemes) ? loadedThemes : []);
       }
     } catch (error) {
       console.error("Failed to initialize print page:", error);
@@ -372,8 +432,26 @@ export default function PrintLayoutPage() {
 
   const startInteraction = (event: ReactMouseEvent, item: LayoutItem, mode: InteractionMode) => {
     event.stopPropagation();
-    setSelectedId(item.id);
+    if ((event.ctrlKey || event.metaKey) && mode === "drag") {
+      setSelectedIds((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]));
+      return;
+    }
+
+    const nextSelectedIds = selectedIdSet.has(item.id) && mode === "drag" ? selectedIds : [item.id];
+    setSelectedIds(nextSelectedIds);
     setActivePage(item.page);
+    const pageEl = pageRefs.current[item.page];
+    const rect = pageEl?.getBoundingClientRect();
+    const pointerOffsetX = rect ? ((event.clientX - rect.left) / rect.width) * 100 - item.x : item.w / 2;
+    const pointerOffsetY = rect ? ((event.clientY - rect.top) / rect.height) * 100 - item.y : item.h / 2;
+
+    const dragSnapshot =
+      mode === "drag"
+        ? layoutItems
+            .filter((entry) => nextSelectedIds.includes(entry.id))
+            .map((entry) => ({ id: entry.id, x: entry.x, y: entry.y, page: entry.page }))
+        : undefined;
+
     setInteraction({
       itemId: item.id,
       mode,
@@ -384,13 +462,17 @@ export default function PrintLayoutPage() {
       startItemY: item.y,
       startItemW: item.w,
       startItemH: item.h,
+      pointerOffsetX,
+      pointerOffsetY,
+      dragSnapshot,
     });
   };
 
   const deleteSelected = () => {
-    if (!selectedId) return;
-    setLayoutItems((prev) => prev.filter((item) => item.id !== selectedId));
-    setSelectedId(null);
+    if (selectedIds.length === 0) return;
+    const idSet = new Set(selectedIds);
+    setLayoutItems((prev) => prev.filter((item) => !idSet.has(item.id)));
+    setSelectedIds([]);
   };
 
   const addDeviceToPage = (device: Device) => {
@@ -411,7 +493,10 @@ export default function PrintLayoutPage() {
     };
 
     setLayoutItems((prev) => [...prev, newItem]);
-    setSelectedId(newItem.id);
+    if (activePage + 1 > pageCount) {
+      setPageCount(activePage + 1);
+    }
+    setSelectedIds([newItem.id]);
   };
 
   const autoPaginate = () => {
@@ -442,8 +527,113 @@ export default function PrintLayoutPage() {
     });
 
     setLayoutItems(arranged);
-    setSelectedId(null);
+    setPageCount(Math.max(1, ...arranged.map((item) => item.page + 1)));
+    setSelectedIds([]);
     setActivePage(0);
+  };
+
+  const overlaps = (a: LayoutItem, b: LayoutItem) => {
+    return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+  };
+
+  const condensePages = () => {
+    const sorted = [...layoutItems].sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
+    const placed: LayoutItem[] = [];
+
+    for (const item of sorted) {
+      let placedItem: LayoutItem | null = null;
+      let targetPage = 0;
+      while (!placedItem) {
+        const onPage = placed.filter((p) => p.page === targetPage);
+        let foundSpot = false;
+        for (let y = 0; y <= 100 - item.h; y += GRID_Y) {
+          for (let x = 0; x <= 100 - item.w; x += GRID_X) {
+            const candidate = { ...item, page: targetPage, x, y };
+            if (!onPage.some((p) => overlaps(candidate, p))) {
+              placedItem = candidate;
+              foundSpot = true;
+              break;
+            }
+          }
+          if (foundSpot) break;
+        }
+        if (!placedItem) targetPage += 1;
+      }
+      placed.push(placedItem);
+    }
+
+    setLayoutItems(placed);
+    setPageCount(Math.max(1, ...placed.map((item) => item.page + 1)));
+    setSelectedIds([]);
+    setActivePage(0);
+  };
+
+  const applyGlobalThemeToPrint = async () => {
+    if (!selectedThemeId) return;
+    const theme = themes.find((entry) => entry.id === selectedThemeId);
+    if (!theme) return;
+
+    const selectedSet = new Set(selectedIds);
+    const targetDeviceIds = selectedSet.size > 0
+      ? Array.from(new Set(layoutItems.filter((item) => selectedSet.has(item.id)).map((item) => item.deviceId)))
+      : devices.map((device) => device.id);
+    if (targetDeviceIds.length === 0) return;
+    const targetDeviceIdSet = new Set(targetDeviceIds);
+
+    const effectiveBase = publicPortalUrl || baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+    const nextQrEntries = await Promise.all(
+      devices
+        .filter((device) => targetDeviceIdSet.has(device.id))
+        .map(async (device) => {
+        const deviceUrl = `${effectiveBase}/device/${device.uniqueCode}`;
+        const qrSvg = await generateStyledQrSvg({
+          url: deviceUrl,
+          deviceName: device.name,
+          settings: theme.settings ?? null,
+        });
+        return [device.id, qrSvg] as const;
+      })
+    );
+
+    const nextQrMapDelta: Record<string, string> = Object.fromEntries(nextQrEntries);
+    setQrByDeviceId((prev) => ({ ...prev, ...nextQrMapDelta }));
+    setLayoutItems((prev) =>
+      prev.map((item) =>
+        targetDeviceIdSet.has(item.deviceId) ? { ...item, qrSvg: nextQrMapDelta[item.deviceId] ?? item.qrSvg } : item
+      )
+    );
+  };
+
+  const applyGlobalQrSizeInches = () => {
+    const inches = Number(globalQrSizeInches);
+    if (!Number.isFinite(inches) || inches <= 0) return;
+    const widthPct = clamp((inches / PAGE_WIDTH_IN) * 100, MIN_SIZE, 100);
+    const heightPct = clamp((inches / PAGE_HEIGHT_IN) * 100, MIN_SIZE, 100);
+    const selectedSet = new Set(selectedIds);
+
+    setLayoutItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        w: selectedSet.size === 0 || selectedSet.has(item.id) ? clamp(widthPct, MIN_SIZE, 100 - item.x) : item.w,
+        h: selectedSet.size === 0 || selectedSet.has(item.id) ? clamp(heightPct, MIN_SIZE, 100 - item.y) : item.h,
+      }))
+    );
+  };
+
+  const addBlankPage = () => {
+    setPageCount((prev) => prev + 1);
+    setActivePage(pageCount);
+  };
+
+  const removeActiveBlankPage = () => {
+    const hasItems = layoutItems.some((item) => item.page === activePage);
+    if (hasItems || pageCount <= 1) return;
+
+    setLayoutItems((prev) =>
+      prev.map((item) => (item.page > activePage ? { ...item, page: item.page - 1 } : item))
+    );
+    setPageCount((prev) => Math.max(1, prev - 1));
+    setActivePage((prev) => Math.max(0, prev - 1));
   };
 
   const serializeLayout = (): PersistedLayoutData => ({
@@ -482,7 +672,8 @@ export default function PrintLayoutPage() {
 
     if (validItems.length > 0) {
       setLayoutItems(validItems);
-      setSelectedId(null);
+      setPageCount(Math.max(1, ...validItems.map((item) => item.page + 1)));
+      setSelectedIds([]);
       setActivePage(0);
     }
   };
@@ -613,13 +804,13 @@ export default function PrintLayoutPage() {
         <aside className="w-full lg:w-96 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 no-print">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-3">Layout Controls</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Select a block, drag to move, or drag the corner to resize.
+            Ctrl+click blocks to multi-select, then drag to move together or apply style changes to selected.
           </p>
 
           <div className="grid grid-cols-2 gap-2 mb-4">
             <button
               onClick={deleteSelected}
-              disabled={!selectedId}
+              disabled={selectedIds.length === 0}
               className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Trash2 size={14} /> Delete
@@ -630,6 +821,74 @@ export default function PrintLayoutPage() {
             >
               <RefreshCw size={14} /> Auto Paginate
             </button>
+            <button
+              onClick={condensePages}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <RefreshCw size={14} /> Condense Pages
+            </button>
+            <button
+              onClick={addBlankPage}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <Plus size={14} /> Add Blank Page
+            </button>
+            <button
+              onClick={removeActiveBlankPage}
+              disabled={pageCount <= 1 || layoutItems.some((item) => item.page === activePage)}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 size={14} /> Remove Blank Page
+            </button>
+          </div>
+
+          <div className="border rounded-lg border-gray-200 dark:border-gray-700 p-3 mb-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Print-only Global Styling</h3>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-600 dark:text-gray-300">
+                Apply theme to {selectedIds.length > 0 ? "selected QR codes" : "all QR codes"} (print only)
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={selectedThemeId}
+                  onChange={(e) => setSelectedThemeId(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm"
+                >
+                  <option value="">Select theme...</option>
+                  {themes.map((theme) => (
+                    <option key={theme.id} value={theme.id}>{theme.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => void applyGlobalThemeToPrint()}
+                  disabled={!selectedThemeId}
+                  className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 disabled:opacity-40"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-600 dark:text-gray-300">
+                Set QR size for {selectedIds.length > 0 ? "selected cards" : "all cards"} (inches)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={globalQrSizeInches}
+                  onChange={(e) => setGlobalQrSizeInches(e.target.value)}
+                  className="w-28 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm"
+                />
+                <button
+                  onClick={applyGlobalQrSizeInches}
+                  className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50"
+                >
+                  Apply Size
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 mb-4">
@@ -809,7 +1068,7 @@ export default function PrintLayoutPage() {
                     }}
                     className={`print-page relative bg-white border border-gray-300 shadow-xl ${pageIndex !== activePage ? "opacity-70" : ""}`}
                     style={{ width: "8.5in", height: "11in", maxWidth: "100%", aspectRatio: "8.5 / 11" }}
-                    onMouseDown={() => setSelectedId(null)}
+                    onMouseDown={() => setSelectedIds([])}
                   >
                     {showGuides && (
                       <>
@@ -831,7 +1090,7 @@ export default function PrintLayoutPage() {
                     )}
 
                     {items.map((item) => {
-                      const selected = selectedId === item.id;
+                      const selected = selectedIdSet.has(item.id);
                       return (
                         <div
                           key={item.id}
@@ -871,9 +1130,7 @@ export default function PrintLayoutPage() {
                             onClick={(event) => {
                               event.stopPropagation();
                               setLayoutItems((prev) => prev.filter((entry) => entry.id !== item.id));
-                              if (selected) {
-                                setSelectedId(null);
-                              }
+                              setSelectedIds((prev) => prev.filter((id) => id !== item.id));
                             }}
                           >
                             <Trash2 size={12} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import {
   MapPin, MessageCircle, Send, User, Clock, AlertCircle,
@@ -31,7 +31,9 @@ interface DeviceData {
 
 export default function PublicDevicePage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const code = params?.code as string;
+  const previewMode = searchParams?.get("preview") === "1";
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [device, setDevice] = useState<DeviceData | null>(null);
@@ -139,7 +141,8 @@ export default function PublicDevicePage() {
     
     const pollMessages = async () => {
       try {
-        const res = await fetch(`/api/public/device/${code}`);
+        const suffix = previewMode ? "?preview=1" : "";
+        const res = await fetch(`/api/public/device/${code}${suffix}`);
         if (res.ok) {
           const data = await res.json();
           // Only update if there are new messages
@@ -157,11 +160,12 @@ export default function PublicDevicePage() {
 
     const interval = setInterval(pollMessages, 3000);
     return () => clearInterval(interval);
-  }, [device, code, notFound, error]);
+  }, [device, code, notFound, error, previewMode]);
 
   const fetchDevice = async () => {
     try {
-      const res = await fetch(`/api/public/device/${code}`);
+      const suffix = previewMode ? "?preview=1" : "";
+      const res = await fetch(`/api/public/device/${code}${suffix}`);
       if (res.ok) {
         const data = await res.json();
         setDevice(data);
@@ -189,7 +193,8 @@ export default function PublicDevicePage() {
     setFormError("");
 
     try {
-      const res = await fetch(`/api/public/device/${code}/message`, {
+      const suffix = previewMode ? "?preview=1" : "";
+      const res = await fetch(`/api/public/device/${code}/message${suffix}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -313,6 +318,11 @@ export default function PublicDevicePage() {
 
       {/* Main Content */}
       <main className="max-w-2xl mx-auto px-6 py-8">
+        {previewMode && (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+            Preview mode: scan analytics and notifications are disabled.
+          </div>
+        )}
         {/* Message Board */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
