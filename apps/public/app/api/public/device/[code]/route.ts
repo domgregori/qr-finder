@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@shared/lib/db";
 import { getFileUrl } from "@shared/lib/storage";
 import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitResponse } from "@shared/lib/rate-limit";
+import { lookupIpGeolocation, normalizeClientIp } from "@shared/lib/ip-geolocation";
+import { UAParser } from "ua-parser-js";
+import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +21,7 @@ export async function GET(
   }
 
   try {
+    const previewMode = req.nextUrl.searchParams.get("preview") === "1";
     const resolvedParams = await params;
     const code = resolvedParams?.code ?? "";
 
@@ -75,14 +79,42 @@ export async function GET(
     const scanCookieName = `qr_scan_${device.id}`;
     const hasScanCookie = req.cookies.get(scanCookieName)?.value === "1";
 
-    // Notify admin app to send Apprise notifications (keeps endpoints private)
-    if (!hasScanCookie) {
+    // Skip scan persistence + notifications in preview mode.
+    if (!previewMode && !hasScanCookie) {
+      const userAgent = req.headers.get("user-agent");
+      const normalizedIp = normalizeClientIp(clientIp);
+      const parsedUserAgent = userAgent
+        ? JSON.parse(JSON.stringify(new UAParser(userAgent).getResult()))
+        : null;
+      const geolocation = await lookupIpGeolocation(normalizedIp);
+      const scanMetadata =
+        parsedUserAgent || geolocation
+          ? {
+              userAgent: parsedUserAgent,
+              geolocation
+            }
+          : undefined;
+
       try {
-        await prisma.deviceScan.create({
-          data: { deviceId: device.id }
+        await prisma.deviceScan.createMany({
+          data: [
+            {
+              deviceId: device.id,
+              ipAddress: normalizedIp,
+              userAgent: userAgent || null,
+              metadata: scanMetadata as Prisma.InputJsonValue | undefined
+            }
+          ]
         });
       } catch (e) {
-        console.error("Failed to persist device scan:", e);
+        console.error("Failed to persist enriched device scan, retrying legacy insert:", e);
+        try {
+          await prisma.deviceScan.createMany({
+            data: [{ deviceId: device.id }]
+          });
+        } catch (fallbackError) {
+          console.error("Failed to persist device scan:", fallbackError);
+        }
       }
 
       const adminNotifyUrl = process.env.ADMIN_INTERNAL_URL || "http://admin:3000";
@@ -118,7 +150,7 @@ export async function GET(
       profileBlurb,
       profileAvatarUrl,
     });
-    if (!hasScanCookie) {
+    if (!previewMode && !hasScanCookie) {
       response.cookies.set(scanCookieName, "1", {
         path: "/",
         httpOnly: false,

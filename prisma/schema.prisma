@@ -59,6 +59,9 @@ model Message {
 model DeviceScan {
   id        String   @id @default(cuid())
   deviceId  String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
   createdAt DateTime @default(now())
   device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 }
