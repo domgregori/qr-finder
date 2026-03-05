@@ -31,3 +31,7 @@ prisma/dev.db-journal
 
 uploads/
 postgres-data/
+
+# Local machine artifacts
+.stfolder/
+Dockerfile.bak
