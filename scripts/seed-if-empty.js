@@ -49,7 +49,7 @@ async function ensurePublicUserGrants() {
   await prisma.$executeRawUnsafe(`GRANT SELECT ON TABLE "Device" TO public_app;`);
   await prisma.$executeRawUnsafe(`GRANT SELECT ON TABLE "Message" TO public_app;`);
   await prisma.$executeRawUnsafe(`GRANT INSERT ON TABLE "Message" TO public_app;`);
-  await prisma.$executeRawUnsafe(`GRANT SELECT ON TABLE "DeviceScan" TO public_app;`);
+  await prisma.$executeRawUnsafe(`REVOKE ALL ON TABLE "DeviceScan" FROM public_app;`);
   await prisma.$executeRawUnsafe(`GRANT INSERT ON TABLE "DeviceScan" TO public_app;`);
 }
 

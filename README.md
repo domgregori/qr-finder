@@ -147,7 +147,7 @@ STORAGE_TYPE=local
 #### Option 1: Included PostgreSQL (Default)
 
 The docker-compose.yml includes a PostgreSQL container. Data is persisted in a Docker volume.
-The public app uses a restricted DB user by default (`public_app`) for read‑only access plus message inserts.
+The public app uses a restricted DB user by default (`public_app`) for read access to `Device`/`Message`, message inserts, and scan inserts (no scan-history reads).
 
 #### Option 2: External PostgreSQL
 

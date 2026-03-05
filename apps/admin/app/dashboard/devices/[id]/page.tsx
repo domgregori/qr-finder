@@ -23,6 +23,9 @@ interface Message {
 interface DeviceScan {
   id: string;
   createdAt: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata?: unknown;
 }
 
 interface Device {
@@ -84,6 +87,7 @@ export default function DeviceDetailPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [clearMessagesOnRegenerate, setClearMessagesOnRegenerate] = useState(true);
   const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
+  const [selectedScan, setSelectedScan] = useState<DeviceScan | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -436,6 +440,23 @@ export default function DeviceDetailPage() {
     } catch {
       return dateStr;
     }
+  };
+
+  const getObject = (value: unknown): Record<string, unknown> | null => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  };
+
+  const getString = (obj: Record<string, unknown> | null, key: string): string | null => {
+    if (!obj) return null;
+    const value = obj[key];
+    return typeof value === "string" ? value : null;
+  };
+
+  const getNumber = (obj: Record<string, unknown> | null, key: string): number | null => {
+    if (!obj) return null;
+    const value = obj[key];
+    return typeof value === "number" ? value : null;
   };
 
   if (status === "loading" || loading) {
@@ -833,10 +854,19 @@ export default function DeviceDetailPage() {
                     {(device?.scans ?? []).map((scan) => (
                       <div
                         key={scan.id}
-                        className="flex items-center gap-2 rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 shadow-sm"
+                        className="flex items-center justify-between gap-2 rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 shadow-sm"
                       >
-                        <Clock size={14} className="text-gray-500 dark:text-gray-400" />
-                        <span>{formatDate(scan.createdAt)}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Clock size={14} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                          <span className="truncate">{formatDate(scan.createdAt)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedScan(scan)}
+                          className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          Details
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -866,6 +896,70 @@ export default function DeviceDetailPage() {
             className="max-h-[90vh] max-w-[95vw] rounded-xl object-contain"
             onClick={(event) => event.stopPropagation()}
           />
+        </div>
+      )}
+
+      {selectedScan && (
+        <div
+          className="fixed inset-0 z-[61] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedScan(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Scan Details</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedScan(null)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                aria-label="Close scan details"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {(() => {
+              const metadata = getObject(selectedScan.metadata);
+              const parsedUa = getObject(metadata?.userAgent);
+              const geo = getObject(metadata?.geolocation);
+              const rawUa = selectedScan.userAgent || getString(metadata, "rawUserAgent");
+              const browser = [getString(getObject(parsedUa?.browser), "name"), getString(getObject(parsedUa?.browser), "version")].filter(Boolean).join(" ");
+              const os = [getString(getObject(parsedUa?.os), "name"), getString(getObject(parsedUa?.os), "version")].filter(Boolean).join(" ");
+              const deviceType = [
+                getString(getObject(parsedUa?.device), "vendor"),
+                getString(getObject(parsedUa?.device), "model"),
+                getString(getObject(parsedUa?.device), "type")
+              ].filter(Boolean).join(" ");
+              const location = [getString(geo, "city"), getString(geo, "region"), getString(geo, "country")].filter(Boolean).join(", ");
+              const latitude = getNumber(geo, "latitude");
+              const longitude = getNumber(geo, "longitude");
+              return (
+                <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Scanned:</span> {formatDate(selectedScan.createdAt)}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">IP:</span> {selectedScan.ipAddress || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Browser:</span> {browser || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">OS:</span> {os || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Device:</span> {deviceType || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Location:</span> {location || "Unknown"}</p>
+                  {(latitude !== null || longitude !== null) && (
+                    <p>
+                      <span className="font-semibold text-gray-900 dark:text-white">Coordinates:</span>{" "}
+                      {latitude ?? "?"}, {longitude ?? "?"}
+                    </p>
+                  )}
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Timezone:</span> {getString(geo, "timezone") || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">ISP:</span> {getString(geo, "isp") || "Unknown"}</p>
+                  <div className="pt-1">
+                    <p className="mb-1 font-semibold text-gray-900 dark:text-white">User Agent</p>
+                    <p className="break-all rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                      {rawUa || "Unknown"}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
 
