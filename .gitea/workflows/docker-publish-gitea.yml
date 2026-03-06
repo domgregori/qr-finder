@@ -19,6 +19,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve image version
+        id: version
+        shell: bash
+        run: |
+          ref_name="${GITEA_REF_NAME:-${GITHUB_REF_NAME:-}}"
+          ref_full="${GITEA_REF:-${GITHUB_REF:-}}"
+          sha="${GITEA_SHA:-${GITHUB_SHA:-}}"
+
+          if [ -z "$ref_name" ] && [[ "$ref_full" == refs/tags/* ]]; then
+            ref_name="${ref_full#refs/tags/}"
+          fi
+
+          if [ -n "$ref_name" ] && [[ "$ref_name" == v* ]]; then
+            version="$ref_name"
+          else
+            short_sha="$(echo "$sha" | cut -c1-12)"
+            version="sha-$short_sha"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -37,11 +58,14 @@ jobs:
           push: true
           build-args: |
             APP_DIR=${{ matrix.app_dir }}
+            APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:latest
+            ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:${{ steps.version.outputs.version }}
             ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:${{ gitea.sha }}
           labels: |
             org.opencontainers.image.title=qr-finder-${{ matrix.image_suffix }}
             org.opencontainers.image.description=QR Finder ${{ matrix.image_suffix }} container image
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ gitea.sha }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}

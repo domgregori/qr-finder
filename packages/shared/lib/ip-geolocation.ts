@@ -1,24 +1,22 @@
-interface IpWhoIsResponse {
-  success?: boolean;
+interface IpApiCoResponse {
   ip?: string;
-  country?: string;
-  region?: string;
   city?: string;
+  region?: string;
+  region_code?: string;
+  country_name?: string;
+  country_code?: string;
+  postal?: string;
   latitude?: number;
   longitude?: number;
-  postal?: string;
-  timezone?: {
-    id?: string;
-  };
-  connection?: {
-    asn?: number;
-    org?: string;
-    isp?: string;
-  };
+  timezone?: string;
+  org?: string;
+  asn?: string;
+  error?: boolean;
+  reason?: string;
 }
 
 export interface IpGeolocationMetadata {
-  source: "ipwho.is";
+  source: "ipapi.co";
   ip: string;
   country: string | null;
   region: string | null;
@@ -30,6 +28,13 @@ export interface IpGeolocationMetadata {
   asn: number | null;
   organization: string | null;
   isp: string | null;
+}
+
+function parseAsn(asn: string | undefined): number | null {
+  if (!asn) return null;
+  const normalized = asn.toUpperCase().startsWith("AS") ? asn.slice(2) : asn;
+  const value = Number.parseInt(normalized, 10);
+  return Number.isFinite(value) ? value : null;
 }
 
 export function normalizeClientIp(input: string | null | undefined): string | null {
@@ -94,33 +99,34 @@ export async function lookupIpGeolocation(
   const timeout = setTimeout(() => controller.abort(), 1500);
 
   try {
-    const response = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, {
+    const response = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
       method: "GET",
       cache: "no-store",
       signal: controller.signal,
       headers: {
-        Accept: "application/json"
+        Accept: "application/json",
+        "User-Agent": "qr-finder-server/1.0"
       }
     });
 
     if (!response.ok) return null;
 
-    const data = (await response.json()) as IpWhoIsResponse;
-    if (!data?.success) return null;
+    const data = (await response.json()) as IpApiCoResponse;
+    if (data?.error) return null;
 
     return {
-      source: "ipwho.is",
+      source: "ipapi.co",
       ip: ip,
-      country: data.country ?? null,
+      country: data.country_name ?? null,
       region: data.region ?? null,
       city: data.city ?? null,
       latitude: typeof data.latitude === "number" ? data.latitude : null,
       longitude: typeof data.longitude === "number" ? data.longitude : null,
       postalCode: data.postal ?? null,
-      timezone: data.timezone?.id ?? null,
-      asn: typeof data.connection?.asn === "number" ? data.connection.asn : null,
-      organization: data.connection?.org ?? null,
-      isp: data.connection?.isp ?? null
+      timezone: data.timezone ?? null,
+      asn: parseAsn(data.asn),
+      organization: data.org ?? null,
+      isp: data.org ?? null
     };
   } catch {
     return null;

@@ -24,6 +24,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const appVersion = process.env.APP_VERSION || "dev";
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -32,6 +34,9 @@ export default function RootLayout({
       <body className="font-sans" suppressHydrationWarning>
         <Providers>
           {children}
+          <div className="pointer-events-none fixed bottom-2 right-3 z-[100] text-[11px] text-gray-400 dark:text-gray-500">
+            {appVersion}
+          </div>
         </Providers>
       </body>
     </html>

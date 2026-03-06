@@ -8,6 +8,7 @@ services:
       network: host
       args:
         APP_DIR: apps/admin
+        APP_VERSION: ${APP_VERSION:-dev}
     ports:
       - "3000:3000"
     environment:
@@ -27,6 +28,7 @@ services:
       # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - UPLOADS_DIR=/apps/uploads
       - NTFY_EXTRA_HOSTS=${NTFY_EXTRA_HOSTS:-}
+      - APP_VERSION=${APP_VERSION:-dev}
     extra_hosts:
       - "${NTFY_EXTRA_HOSTS:-}"
     volumes:

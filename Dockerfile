@@ -28,11 +28,13 @@ RUN npm --workspace ${APP_DIR} run build
 
 FROM node:20 AS runner
 ARG APP_DIR=apps/admin
+ARG APP_VERSION=dev
 WORKDIR /apps
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV APP_DIR=${APP_DIR}
+ENV APP_VERSION=${APP_VERSION}
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
