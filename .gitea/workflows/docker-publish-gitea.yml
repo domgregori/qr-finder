@@ -23,9 +23,9 @@ jobs:
         id: version
         shell: bash
         run: |
-          ref_name="${GITEA_REF_NAME:-${GITHUB_REF_NAME:-}}"
-          ref_full="${GITEA_REF:-${GITHUB_REF:-}}"
-          sha="${GITEA_SHA:-${GITHUB_SHA:-}}"
+          ref_name="${GITHUB_REF_NAME:-}"
+          ref_full="${GITHUB_REF:-}"
+          sha="${GITHUB_SHA:-}"
 
           if [ -z "$ref_name" ] && [[ "$ref_full" == refs/tags/* ]]; then
             ref_name="${ref_full#refs/tags/}"
@@ -62,10 +62,10 @@ jobs:
           tags: |
             ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:latest
             ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:${{ steps.version.outputs.version }}
-            ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:${{ gitea.sha }}
+            ${{ vars.REGISTRY_HOST }}/${{ vars.REGISTRY_NAMESPACE }}/qr-finder-${{ matrix.image_suffix }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.title=qr-finder-${{ matrix.image_suffix }}
             org.opencontainers.image.description=QR Finder ${{ matrix.image_suffix }} container image
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
-            org.opencontainers.image.revision=${{ gitea.sha }}
-            org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
