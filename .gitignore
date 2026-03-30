@@ -18,6 +18,8 @@ pnpm-debug.log*
 .parcel-cache
 
 coverage
+playwright-report/
+test-results/
 
 dist
 build
@@ -35,3 +37,6 @@ postgres-data/
 # Local machine artifacts
 .stfolder/
 Dockerfile.bak
+
+# TypeScript incremental cache
+*.tsbuildinfo

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // GET - Get single endpoint
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,8 +17,9 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     const endpoint = await prisma.appriseEndpoint.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!endpoint) {
@@ -35,7 +36,7 @@ export async function GET(
 // PUT - Update endpoint
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -43,10 +44,11 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     const { name, url } = await request.json();
 
     const endpoint = await prisma.appriseEndpoint.update({
-      where: { id: params.id },
+      where: { id },
       data: { name, url },
     });
 
@@ -60,7 +62,7 @@ export async function PUT(
 // DELETE - Delete endpoint
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -68,8 +70,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     await prisma.appriseEndpoint.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true });
@@ -82,7 +85,7 @@ export async function DELETE(
 // POST - Test notification
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -90,8 +93,9 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     const endpoint = await prisma.appriseEndpoint.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!endpoint) {
