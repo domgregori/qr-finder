@@ -1,0 +1,126 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@shared/lib/auth-options";
+import { prisma } from "@shared/lib/db";
+import { customAlphabet } from "nanoid";
+import { getFileUrl } from "@shared/lib/storage";
+import { sanitizeDeviceName, sanitizeDescription, sanitizeUrl } from "@shared/lib/sanitize";
+
+export const dynamic = "force-dynamic";
+
+const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 8);
+
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const devices = await prisma.device.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: {
+          select: { messages: true, scans: true }
+        },
+        scans: {
+          select: { createdAt: true },
+          orderBy: { createdAt: "desc" }
+        }
+      }
+    });
+
+    const withPhotoUrls = await Promise.all(
+      devices.map(async (device) => {
+        let photoDisplayUrl: string | null = null;
+        if (device.photoUrl) {
+          try {
+            photoDisplayUrl = await getFileUrl(device.photoUrl, device.isPublicPhoto);
+          } catch (e) {
+            console.error("Failed to get device photo URL:", e);
+          }
+        }
+        const viewedAt = device.lastScanViewedAt;
+        let newScanCount = 0;
+        for (const scan of device.scans ?? []) {
+          if (!viewedAt || scan.createdAt > viewedAt) {
+            newScanCount += 1;
+          }
+        }
+
+        const { scans, ...deviceWithoutScans } = device;
+        return { ...deviceWithoutScans, photoDisplayUrl, newScanCount };
+      })
+    );
+
+    return NextResponse.json(withPhotoUrls);
+  } catch (error) {
+    console.error("Get devices error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const {
+      name: rawName,
+      description: rawDescription,
+      appriseUrl: rawAppriseUrl,
+      appriseUrls: rawAppriseUrls,
+      includeBio,
+      photoUrl,
+      isPublicPhoto
+    } = body ?? {};
+
+    // Sanitize inputs
+    const name = sanitizeDeviceName(rawName);
+    const description = rawDescription ? sanitizeDescription(rawDescription) : null;
+    const appriseUrl = rawAppriseUrl ? sanitizeUrl(rawAppriseUrl) : null;
+    const appriseUrls = Array.isArray(rawAppriseUrls)
+      ? rawAppriseUrls
+          .map((url) => (url ? sanitizeUrl(url) : null))
+          .filter((url): url is string => Boolean(url))
+      : appriseUrl
+        ? [appriseUrl]
+        : [];
+
+    if (!name) {
+      return NextResponse.json(
+        { error: "Device name is required" },
+        { status: 400 }
+      );
+    }
+
+    const uniqueCode = nanoid();
+
+    const device = await prisma.device.create({
+      data: {
+        name,
+        description,
+        appriseUrl: appriseUrls[0] ?? appriseUrl ?? null,
+        appriseUrls,
+        includeBio: typeof includeBio === "boolean" ? includeBio : true,
+        photoUrl: photoUrl ?? null,
+        isPublicPhoto: isPublicPhoto ?? false,
+        uniqueCode
+      }
+    });
+
+    return NextResponse.json(device);
+  } catch (error) {
+    console.error("Create device error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

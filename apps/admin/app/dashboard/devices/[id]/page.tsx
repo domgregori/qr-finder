@@ -1,0 +1,1051 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
+import { toast, Toaster } from "sonner";
+import {
+  MapPin, ArrowLeft, Smartphone, MessageCircle, QrCode,
+  Send, User, Clock, AlertCircle, Save, Trash2, RotateCcw,
+  RefreshCw, ShieldAlert, X, Bell
+} from "lucide-react";
+import { ThemeToggle } from "@shared/components/theme-toggle";
+
+interface Message {
+  id: string;
+  nickname: string;
+  message: string;
+  isOwnerReply: boolean;
+  createdAt: string;
+}
+
+interface DeviceScan {
+  id: string;
+  createdAt: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata?: unknown;
+}
+
+interface Device {
+  id: string;
+  name: string;
+  description: string | null;
+  photoUrl: string | null;
+  photoDisplayUrl?: string | null;
+  isPublicPhoto?: boolean | null;
+  appriseUrl: string | null;
+  appriseUrls?: string[] | null;
+  includeBio?: boolean | null;
+  uniqueCode: string;
+  createdAt: string;
+  messages: Message[];
+  scans: DeviceScan[];
+  newScanCount?: number;
+}
+
+interface AppriseEndpoint {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export default function DeviceDetailPage() {
+  const { data: session, status } = useSession() || {};
+  const router = useRouter();
+  const params = useParams();
+  const id = params?.id as string;
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [device, setDevice] = useState<Device | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [clearing, setClearing] = useState(false);
+
+  // Edit mode states
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editAppriseUrls, setEditAppriseUrls] = useState<string[]>([]);
+  const [customAppriseUrl, setCustomAppriseUrl] = useState("");
+  const [selectedEndpoint, setSelectedEndpoint] = useState("");
+  const [appriseEndpoints, setAppriseEndpoints] = useState<AppriseEndpoint[]>([]);
+  const [editIncludeBio, setEditIncludeBio] = useState(true);
+  const [editPhotoUrl, setEditPhotoUrl] = useState("");
+  const [editPhotoDisplayUrl, setEditPhotoDisplayUrl] = useState<string | null>(null);
+  const [editIsPublicPhoto, setEditIsPublicPhoto] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Regenerate code modal states
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [clearMessagesOnRegenerate, setClearMessagesOnRegenerate] = useState(true);
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
+  const [selectedScan, setSelectedScan] = useState<DeviceScan | null>(null);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
+
+  useEffect(() => {
+    if (status === "authenticated" && id) {
+      fetchAppriseEndpoints();
+      fetchDevice();
+    }
+  }, [status, id]);
+
+  useEffect(() => {
+    if (!activeImageUrl) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveImageUrl(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeImageUrl]);
+
+  const markScansViewed = async () => {
+    try {
+      await fetch(`/api/devices/${id}/scans/viewed`, { method: "POST" });
+      setDevice((prev) => (prev ? { ...prev, newScanCount: 0 } : prev));
+    } catch (err) {
+      console.error("Failed to mark scans viewed:", err);
+    }
+  };
+
+  const fetchAppriseEndpoints = async () => {
+    try {
+      const res = await fetch("/api/apprise");
+      if (res.ok) {
+        const data = await res.json();
+        setAppriseEndpoints(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch Apprise endpoints:", err);
+    }
+  };
+
+  // Real-time polling for new messages
+  useEffect(() => {
+    if (status !== "authenticated" || !device || !id) return;
+    
+    const pollMessages = async () => {
+      try {
+        const res = await fetch(`/api/devices/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          const hasNewMessages = data.messages.length > device.messages.length;
+          const hasScanChanges = data.scans.length !== (device.scans?.length ?? 0);
+
+          if (hasNewMessages || hasScanChanges) {
+            // Find new messages that aren't owner replies (finder messages)
+            const newFinderMessages = data.messages.slice(device.messages.length).filter(
+              (msg: Message) => !msg.isOwnerReply
+            );
+            
+            // Show toast for each new finder message
+            newFinderMessages.forEach((msg: Message) => {
+              toast.info(`New message from ${msg.nickname}`, {
+                description: msg.message.length > 50 ? msg.message.substring(0, 50) + "..." : msg.message,
+                duration: 5000,
+                icon: <Bell className="w-4 h-4" />,
+              });
+            });
+            
+            setDevice(data);
+            if ((data.newScanCount ?? 0) > 0) {
+              void markScansViewed();
+            }
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
+          }
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    };
+
+    const interval = setInterval(pollMessages, 3000);
+    return () => clearInterval(interval);
+  }, [device, id, status]);
+
+  const fetchDevice = async () => {
+    try {
+      const res = await fetch(`/api/devices/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDevice(data);
+        setEditName(data?.name ?? "");
+        setEditDescription(data?.description ?? "");
+        const urls = Array.isArray(data?.appriseUrls)
+          ? data.appriseUrls
+          : data?.appriseUrl
+            ? [data.appriseUrl]
+            : [];
+        setEditAppriseUrls(urls.filter((url: string) => typeof url === "string" && url.trim().length > 0));
+        setEditIncludeBio(typeof data?.includeBio === "boolean" ? data.includeBio : true);
+        setEditPhotoUrl(data?.photoUrl ?? "");
+        setEditPhotoDisplayUrl(data?.photoDisplayUrl ?? null);
+        setEditIsPublicPhoto(typeof data?.isPublicPhoto === "boolean" ? data.isPublicPhoto : true);
+        setRemovePhoto(false);
+        if ((data?.newScanCount ?? 0) > 0) {
+          void markScansViewed();
+        }
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Failed to fetch device:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyText.trim()) return;
+
+    setSending(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/devices/${id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname: "Owner",
+          message: replyText.trim()
+        })
+      });
+
+      if (res.ok) {
+        const newMessage = await res.json();
+        setDevice((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: [...(prev?.messages ?? []), newMessage]
+          };
+        });
+        setReplyText("");
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
+        }, 100);
+      }
+    } catch (err) {
+      console.error("Failed to send reply:", err);
+      setError("Failed to send reply");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const addAppriseUrl = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setEditAppriseUrls((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+  };
+
+  const removeAppriseUrl = (url: string) => {
+    setEditAppriseUrls((prev) => prev.filter((item) => item !== url));
+  };
+
+  const handleEndpointChange = (value: string) => {
+    setSelectedEndpoint(value);
+    if (value) {
+      const endpoint = appriseEndpoints.find(e => e.id === value);
+      if (endpoint?.url) {
+        addAppriseUrl(endpoint.url);
+      }
+      setSelectedEndpoint("");
+    }
+  };
+
+  const handleClearMessages = async () => {
+    if (!confirm("Clear all messages for this device? This cannot be undone.")) return;
+
+    setClearing(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/devices/${id}/messages`, {
+        method: "DELETE"
+      });
+
+      if (res.ok) {
+        setDevice((prev) => {
+          if (!prev) return prev;
+          return { ...prev, messages: [] };
+        });
+      } else {
+        setError("Failed to clear messages");
+      }
+    } catch (err) {
+      console.error("Failed to clear messages:", err);
+      setError("Failed to clear messages");
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!file) return;
+    setUploadingPhoto(true);
+    setError("");
+
+    try {
+      const presignedRes = await fetch("/api/upload/presigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          isPublic: editIsPublicPhoto
+        })
+      });
+
+      if (!presignedRes.ok) throw new Error("Failed to get upload URL");
+
+      const { uploadUrl, cloud_storage_path, useLocalUpload } = await presignedRes.json();
+
+      if (useLocalUpload) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const uploadRes = await fetch("/api/upload/local", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!uploadRes.ok) throw new Error("Failed to upload file");
+
+        const { cloud_storage_path: localPath } = await uploadRes.json();
+        setEditPhotoUrl(localPath);
+        const encodedPath = localPath
+          .split("/")
+          .map((segment: string) => encodeURIComponent(segment))
+          .join("/");
+        setEditPhotoDisplayUrl(`/api/files/${encodedPath}`);
+      } else {
+        const urlParams = new URL(uploadUrl).searchParams;
+        const signedHeaders = urlParams?.get?.("X-Amz-SignedHeaders") ?? "";
+        const needsContentDisposition = signedHeaders.includes("content-disposition");
+
+        const headers: Record<string, string> = { "Content-Type": file.type };
+        if (needsContentDisposition) {
+          headers["Content-Disposition"] = "attachment";
+        }
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers,
+          body: file
+        });
+
+        if (!uploadRes.ok) throw new Error("Failed to upload file");
+
+        setEditPhotoUrl(cloud_storage_path);
+        setEditPhotoDisplayUrl(cloud_storage_path);
+      }
+      setRemovePhoto(false);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError("Failed to upload image");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) {
+      setError("Device name is required");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/devices/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          description: editDescription.trim() || null,
+          appriseUrls: editAppriseUrls,
+          includeBio: editIncludeBio,
+          photoUrl: editPhotoUrl || null,
+          isPublicPhoto: editIsPublicPhoto,
+          removePhoto
+        })
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setDevice((prev) => (prev ? { ...prev, ...updated } : prev));
+        setEditPhotoDisplayUrl(updated?.photoDisplayUrl ?? editPhotoDisplayUrl);
+        setRemovePhoto(false);
+        setEditMode(false);
+      }
+    } catch (err) {
+      console.error("Failed to update device:", err);
+      setError("Failed to update device");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRegenerateCode = async () => {
+    setRegenerating(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/devices/${id}/regenerate-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clearMessages: clearMessagesOnRegenerate })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setDevice(data.device);
+        setShowRegenerateModal(false);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to regenerate code");
+      }
+    } catch (err) {
+      console.error("Failed to regenerate code:", err);
+      setError("Failed to regenerate code");
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleString();
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getObject = (value: unknown): Record<string, unknown> | null => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  };
+
+  const getString = (obj: Record<string, unknown> | null, key: string): string | null => {
+    if (!obj) return null;
+    const value = obj[key];
+    return typeof value === "string" ? value : null;
+  };
+
+  const getNumber = (obj: Record<string, unknown> | null, key: string): number | null => {
+    if (!obj) return null;
+    const value = obj[key];
+    return typeof value === "number" ? value : null;
+  };
+
+  if (status === "loading" || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated" || !device) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Toaster position="top-right" richColors />
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
+              </Link>
+              <div className="flex items-center gap-3">
+                {device?.photoDisplayUrl ? (
+                  <div className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => setActiveImageUrl(device.photoDisplayUrl ?? null)}
+                      className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <img src={device.photoDisplayUrl} alt={device?.name ?? "Device"} className="w-full h-full object-cover" />
+                    </button>
+                    <div className="pointer-events-none absolute left-0 top-11 z-20 hidden w-40 rounded-lg border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-800 md:block md:opacity-0 md:group-hover:opacity-100 md:transition-opacity">
+                      <img src={device.photoDisplayUrl} alt={device?.name ?? "Device preview"} className="h-28 w-full rounded-md object-cover" />
+                    </div>
+                  </div>
+                ) : (
+                  <MapPin size={24} className="text-orange-500" />
+                )}
+                <span className="font-bold text-gray-900 dark:text-white">{device?.name ?? ""}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <Link
+                href={`/dashboard/devices/${id}/qr`}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors font-medium"
+              >
+                <QrCode size={18} /> QR Code
+              </Link>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Device Info */}
+          <div className="md:col-span-1">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-gray-900 dark:text-white">Device Info</h2>
+                <button
+                  onClick={() => setEditMode(!editMode)}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  {editMode ? "Cancel" : "Edit"}
+                </button>
+              </div>
+
+              {editMode ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400">Name</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400">Description</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm mt-1 resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400">Device Photo</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handlePhotoUpload(file);
+                      }}
+                      className="hidden"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click?.()}
+                        className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
+                      >
+                        {uploadingPhoto ? "Uploading..." : editPhotoDisplayUrl ? "Change Photo" : "Upload Photo"}
+                      </button>
+                      {editPhotoDisplayUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditPhotoDisplayUrl(null);
+                            setEditPhotoUrl("");
+                            setRemovePhoto(true);
+                          }}
+                          className="text-sm text-red-600 dark:text-red-400 hover:text-red-700"
+                        >
+                          Remove Photo
+                        </button>
+                      )}
+                    </div>
+                    {editPhotoDisplayUrl && (
+                      <div className="group relative mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setActiveImageUrl(editPhotoDisplayUrl)}
+                          className="w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <img src={editPhotoDisplayUrl} alt="Device" className="w-full h-40 object-contain" />
+                        </button>
+                        <div className="pointer-events-none absolute right-2 top-2 rounded-md bg-black/65 px-2 py-1 text-xs text-white opacity-0 transition-opacity md:group-hover:opacity-100">
+                          Tap or click for full view
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        id="edit-public-photo"
+                        type="checkbox"
+                        checked={editIsPublicPhoto}
+                        onChange={(e) => setEditIsPublicPhoto(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="edit-public-photo" className="text-xs text-gray-600 dark:text-gray-400">
+                        Allow photo to be visible on public page
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400">Notification Endpoints</label>
+                    <select
+                      value={selectedEndpoint}
+                      onChange={(e) => handleEndpointChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="">Add from saved endpoints...</option>
+                      {appriseEndpoints.map((endpoint) => (
+                        <option key={endpoint.id} value={endpoint.id}>
+                          {endpoint.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        value={customAppriseUrl}
+                        onChange={(e) => setCustomAppriseUrl(e.target.value)}
+                        placeholder="Add custom URL (e.g., ntfy://my-topic)"
+                        className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          addAppriseUrl(customAppriseUrl);
+                          setCustomAppriseUrl("");
+                        }}
+                        className="mt-2 w-full px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {editAppriseUrls.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {editAppriseUrls.map((url) => (
+                          <span
+                            key={url}
+                            className="inline-flex items-center gap-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs rounded-full"
+                          >
+                            <span className="font-mono truncate max-w-[200px]">{url}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeAppriseUrl(url)}
+                              className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-white"
+                              title="Remove"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="edit-include-bio"
+                      type="checkbox"
+                      checked={editIncludeBio}
+                      onChange={(e) => setEditIncludeBio(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="edit-include-bio" className="text-sm text-gray-600 dark:text-gray-400">
+                      Show my bio on the public device page
+                    </label>
+                  </div>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={saving}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    <Save size={16} /> {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    {device?.photoDisplayUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setActiveImageUrl(device.photoDisplayUrl ?? null)}
+                        className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <img src={device.photoDisplayUrl} alt={device?.name ?? "Device"} className="w-full h-full object-cover" />
+                      </button>
+                    ) : (
+                      <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                        <Smartphone size={20} className="text-blue-600 dark:text-blue-400" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">{device?.name ?? ""}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Code: {device?.uniqueCode ?? ""}</p>
+                    </div>
+                  </div>
+
+                  {device?.description && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{device.description}</p>
+                  )}
+
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Public URL:</p>
+                    <code className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded block mt-1 break-all">
+                      /device/{device?.uniqueCode ?? ""}
+                    </code>
+                  </div>
+
+                  {/* Regenerate Code Button */}
+                  <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <button
+                      onClick={() => setShowRegenerateModal(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+                    >
+                      <RefreshCw size={14} />
+                      Reset QR Code / URL
+                    </button>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                      Invalidates the old URL after device is found
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="md:col-span-2">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <MessageCircle size={18} />
+                  Messages ({device?.messages?.length ?? 0})
+                </h2>
+                {(device?.messages?.length ?? 0) > 0 && (
+                  <button
+                    onClick={handleClearMessages}
+                    disabled={clearing}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                    title="Clear all messages"
+                  >
+                    {clearing ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 dark:border-red-400" />
+                    ) : (
+                      <RotateCcw size={14} />
+                    )}
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Messages List */}
+              <div className="h-96 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
+                {(device?.messages?.length ?? 0) === 0 ? (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <MessageCircle size={32} className="mx-auto mb-2 opacity-50" />
+                    <p>No messages yet</p>
+                    <p className="text-sm">Messages will appear here when someone finds your device</p>
+                  </div>
+                ) : (
+                  (device?.messages ?? []).map((msg) => (
+                    <div
+                      key={msg?.id}
+                      className={`flex ${msg?.isOwnerReply ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-xs md:max-w-md rounded-xl px-4 py-3 ${
+                          msg?.isOwnerReply
+                            ? "bg-blue-600 text-white"
+                            : "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <User size={12} />
+                          <span className={`text-xs font-medium ${
+                            msg?.isOwnerReply ? "text-blue-100" : "text-gray-600 dark:text-gray-400"
+                          }`}>
+                            {msg?.isOwnerReply ? "You (Owner)" : msg?.nickname ?? ""}
+                          </span>
+                        </div>
+                        <p className="text-sm">{msg?.message ?? ""}</p>
+                        <div className={`flex items-center gap-1 mt-2 text-xs ${
+                          msg?.isOwnerReply ? "text-blue-200" : "text-gray-400 dark:text-gray-500"
+                        }`}>
+                          <Clock size={10} />
+                          {formatDate(msg?.createdAt ?? "")}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Reply Form */}
+              <form onSubmit={handleSendReply} className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                {error && (
+                  <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm rounded-lg mb-3">
+                    <AlertCircle size={14} />
+                    {error}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Type a reply..."
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sending || !replyText.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Send size={16} /> Send
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden mt-6">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <QrCode size={18} />
+                  QR Scan History ({device?.scans?.length ?? 0})
+                </h2>
+              </div>
+              <div className="max-h-56 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
+                {(device?.scans?.length ?? 0) === 0 ? (
+                  <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                    <p>No scans yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(device?.scans ?? []).map((scan) => (
+                      <div
+                        key={scan.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 shadow-sm"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Clock size={14} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                          <span className="truncate">{formatDate(scan.createdAt)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedScan(scan)}
+                          className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          Details
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {activeImageUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setActiveImageUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveImageUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-gray-900 hover:bg-white"
+            aria-label="Close image preview"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={activeImageUrl}
+            alt={`${device?.name ?? "Device"} full view`}
+            className="max-h-[90vh] max-w-[95vw] rounded-xl object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {selectedScan && (
+        <div
+          className="fixed inset-0 z-[61] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedScan(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Scan Details</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedScan(null)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                aria-label="Close scan details"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {(() => {
+              const metadata = getObject(selectedScan.metadata);
+              const parsedUa = getObject(metadata?.userAgent);
+              const geo = getObject(metadata?.geolocation);
+              const rawUa = selectedScan.userAgent || getString(metadata, "rawUserAgent");
+              const browser = [getString(getObject(parsedUa?.browser), "name"), getString(getObject(parsedUa?.browser), "version")].filter(Boolean).join(" ");
+              const os = [getString(getObject(parsedUa?.os), "name"), getString(getObject(parsedUa?.os), "version")].filter(Boolean).join(" ");
+              const deviceType = [
+                getString(getObject(parsedUa?.device), "vendor"),
+                getString(getObject(parsedUa?.device), "model"),
+                getString(getObject(parsedUa?.device), "type")
+              ].filter(Boolean).join(" ");
+              const location = [getString(geo, "city"), getString(geo, "region"), getString(geo, "country")].filter(Boolean).join(", ");
+              const latitude = getNumber(geo, "latitude");
+              const longitude = getNumber(geo, "longitude");
+              return (
+                <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Scanned:</span> {formatDate(selectedScan.createdAt)}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">IP:</span> {selectedScan.ipAddress || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Browser:</span> {browser || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">OS:</span> {os || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Device:</span> {deviceType || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Location:</span> {location || "Unknown"}</p>
+                  {(latitude !== null || longitude !== null) && (
+                    <p>
+                      <span className="font-semibold text-gray-900 dark:text-white">Coordinates:</span>{" "}
+                      {latitude ?? "?"}, {longitude ?? "?"}
+                    </p>
+                  )}
+                  <p><span className="font-semibold text-gray-900 dark:text-white">Timezone:</span> {getString(geo, "timezone") || "Unknown"}</p>
+                  <p><span className="font-semibold text-gray-900 dark:text-white">ISP:</span> {getString(geo, "isp") || "Unknown"}</p>
+                  <div className="pt-1">
+                    <p className="mb-1 font-semibold text-gray-900 dark:text-white">User Agent</p>
+                    <p className="break-all rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                      {rawUa || "Unknown"}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Regenerate Code Modal */}
+      {showRegenerateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                  <ShieldAlert size={20} className="text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset QR Code</h3>
+              </div>
+              <button
+                onClick={() => setShowRegenerateModal(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X size={18} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                This will generate a <strong>new unique code</strong> for this device. The old QR code and URL will <strong>stop working</strong> immediately.
+              </p>
+              
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 mb-4">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  <strong>Use this when:</strong>
+                </p>
+                <ul className="text-sm text-amber-700 dark:text-amber-400 mt-2 space-y-1 list-disc list-inside">
+                  <li>Your device was found and returned</li>
+                  <li>You want to revoke access for previous finders</li>
+                  <li>You need to replace an old QR sticker</li>
+                </ul>
+              </div>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clearMessagesOnRegenerate}
+                  onChange={(e) => setClearMessagesOnRegenerate(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Also clear all messages (recommended)
+                </span>
+              </label>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm rounded-lg mb-4">
+                <AlertCircle size={14} />
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRegenerateModal(false)}
+                className="flex-1 py-2.5 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRegenerateCode}
+                disabled={regenerating}
+                className="flex-1 py-2.5 px-4 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {regenerating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Generate New Code
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

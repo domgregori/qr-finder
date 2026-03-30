@@ -1,63 +1,60 @@
-FROM node:20-alpine AS base
+FROM node:20 AS base
+ARG APP_DIR=apps/admin
+WORKDIR /apps
 
-# Install dependencies only when needed
 FROM base AS deps
-# libc6-compat may not be available on all architectures, make it optional
 RUN apk add --no-cache libc6-compat 2>/dev/null || true
-WORKDIR /app
 
-COPY package.json yarn.lock* ./
+COPY package.json package-lock.json ./
+COPY apps/admin/package.json ./apps/admin/package.json
+COPY apps/public/package.json ./apps/public/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/admin-public-combined/package.json ./packages/admin-public-combined/package.json
 COPY prisma ./prisma/
 
-RUN yarn install --frozen-lockfile
-RUN yarn prisma generate
+RUN npm install --include=dev --no-audit --no-fund \
+  && test -x node_modules/.bin/next
 
-# Rebuild the source code only when needed
 FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+ARG APP_DIR=apps/admin
+COPY --from=deps /apps/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_MODE=standalone
+ENV NEXT_FONT_GOOGLE_DOWNLOAD=0
 
-# Generate Prisma client in builder stage to ensure proper initialization
-RUN npx prisma generate
+RUN npm --workspace ${APP_DIR} run build
 
-RUN yarn build
-
-# Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
+FROM node:20 AS runner
+ARG APP_DIR=apps/admin
+ARG APP_VERSION=dev
+WORKDIR /apps
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV APP_DIR=${APP_DIR}
+ENV APP_VERSION=${APP_VERSION}
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /apps/${APP_DIR}/public ./public
+COPY --from=builder /apps/prisma ./prisma
+COPY --from=builder /apps/scripts ./scripts
 
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+COPY --from=builder --chown=nextjs:nodejs /apps/${APP_DIR}/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /apps/${APP_DIR}/.next/static /apps/${APP_DIR}/.next/static
 
-# Automatically leverage output traces to reduce image size
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone/app ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /apps/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /apps/node_modules/bcryptjs ./node_modules/bcryptjs
+COPY --from=builder /apps/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /apps/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /apps/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
-# Copy Prisma client for runtime
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-
-# Create uploads directory for local file storage
-RUN mkdir -p /app/uploads
-RUN chown nextjs:nodejs /app/uploads
+RUN mkdir -p /apps/uploads
+RUN chown -R nextjs:nodejs /apps/uploads
+RUN chown -R nextjs:nodejs /apps/node_modules/.prisma
 
 USER nextjs
 
@@ -66,4 +63,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "node /app/node_modules/prisma/build/index.js db push && node /app/scripts/seed-if-empty.js && node /app/server.js"]
+CMD ["sh", "-c", "if [ \"$SKIP_DB_PUSH\" = \"1\" ]; then node /apps/${APP_DIR}/server.js; else node /apps/node_modules/prisma/build/index.js db push --skip-generate && node /apps/scripts/seed-if-empty.js && node /apps/${APP_DIR}/server.js; fi"]

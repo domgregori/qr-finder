@@ -15,23 +15,27 @@ model User {
   name          String?
   bio           String?
   avatarUrl     String?
-  avatarShape   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  printLayouts  PrintLayout[]
 }
 
 model Device {
-  id          String    @id @default(cuid())
-  name        String
-  description String?
-  photoUrl    String?
-  isPublicPhoto Boolean @default(false)
-  appriseUrl  String?
-  uniqueCode  String    @unique
-  qrSettings  Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  messages    Message[]
+  id               String      @id @default(cuid())
+  name             String
+  description      String?
+  photoUrl         String?
+  isPublicPhoto    Boolean     @default(false)
+  appriseUrl       String?
+  appriseUrls      Json?
+  includeBio       Boolean     @default(true)
+  uniqueCode       String      @unique
+  qrSettings       Json?
+  lastScanViewedAt DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  messages         Message[]
+  scans            DeviceScan[]
 }
 
 model QrTheme {
@@ -52,10 +56,30 @@ model Message {
   device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 }
 
+model DeviceScan {
+  id        String   @id @default(cuid())
+  deviceId  String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
 model AppriseEndpoint {
   id        String   @id @default(cuid())
   name      String
   url       String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PrintLayout {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

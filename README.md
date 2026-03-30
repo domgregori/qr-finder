@@ -13,10 +13,17 @@ Concept piece. Hasn't had a security review.
 - **QR Code Generator**: Customizable QR codes (colors, sizes, text overlays, module shapes)
 - **Apprise Notifications**: Get instant alerts via 80+ services (Telegram, Discord, ntfy, etc.)
 - **Public Message Board**: Finders can leave messages without creating accounts
-- **Cloudflare Turnstile**: Optional spam protection for public forms
 - **Photo Uploads**: Attach photos to help identify devices
 - **Light/Dark Mode**: Full theme support across all pages
 - **Self-Host Friendly**: Local file storage, included PostgreSQL, minimal dependencies
+
+## Repo Structure
+
+```
+apps/admin   # Admin dashboard + private APIs
+apps/public  # Public portal + public APIs
+packages/shared # Shared components, hooks, and server utilities
+```
 
 ---
 
@@ -50,10 +57,22 @@ NEXTAUTH_URL=http://localhost:3000
 # Database connection (optional override)
 DATABASE_URL=postgresql://lostfound:your-secure-password@db:5432/lostfound
 
+# Public app DB connection (optional override)
+PUBLIC_DATABASE_URL=postgresql://public_app:public_app_password@db:5432/lostfound
+
 # Optional: Admin seed credentials
 ADMIN_EMAIL=admin@lostfound.local
 ADMIN_PASSWORD=admin123
 ADMIN_NAME=Admin
+
+# Public app DB user password (limited permissions)
+PUBLIC_DB_PASSWORD=public_app_password
+
+# Internal secret shared between public and admin for notifications
+INTERNAL_NOTIFY_SECRET=change-me
+
+# Public app -> admin app internal URL
+ADMIN_INTERNAL_URL=http://admin:3000
 
 # Optional: set custom DNS server for Docker container
 DOCKER_DNS=
@@ -65,27 +84,29 @@ NTFY_EXTRA_HOSTS=
 ### 3. Start the Application
 
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 4. Initialize Database
 
 ```bash
 # Push database schema
-docker-compose exec app npx prisma db push
+docker compose exec admin npx prisma db push
 
 # Create admin user
-docker-compose exec app npx prisma db seed
+docker compose exec admin npx prisma db seed
 ```
 
 ### 5. Access the App
 
-Open <http://localhost:3000> and login with:
+Open <http://localhost:3000> (admin) and login with:
 
 - **Email**: `admin@lostfound.local` (or `ADMIN_EMAIL`)
 - **Password**: `admin123` (or `ADMIN_PASSWORD`)
 
 ⚠️ **Change this password in production!**
+
+Public portal (if running locally): <http://localhost:3001>
 
 ---
 
@@ -95,20 +116,24 @@ Open <http://localhost:3000> and login with:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│   Next.js App   │────▶│   PostgreSQL    │
-│   (Port 3000)   │     │   (Port 5432)   │
+│  Admin App      │────▶│   PostgreSQL    │
+│  (Port 3000)    │     │   (Port 5432)   │
 └────────┬────────┘     └─────────────────┘
          │
          ▼
 ┌─────────────────┐
-│  Local Storage  │  (or S3-compatible)
+│  Public App     │
+│  (Port 3001)    │
+└─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Local Storage  │
 │   ./uploads/    │
 └─────────────────┘
 ```
 
-### Storage Options
-
-#### Option 1: Local Storage (Default)
+### Storage
 
 Files are stored in the `./uploads` directory. This is the simplest option and works out of the box.
 
@@ -117,42 +142,23 @@ Files are stored in the `./uploads` directory. This is the simplest option and w
 STORAGE_TYPE=local
 ```
 
-#### Option 2: AWS S3
-
-```bash
-# In .env
-STORAGE_TYPE=s3
-AWS_BUCKET_NAME=your-bucket
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-```
-
-#### Option 3: S3-Compatible (MinIO, Backblaze B2, etc.)
-
-```bash
-# In .env
-STORAGE_TYPE=s3
-AWS_BUCKET_NAME=your-bucket
-AWS_ENDPOINT=http://minio:9000
-AWS_FORCE_PATH_STYLE=true
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-```
-
 ### Database Options
 
 #### Option 1: Included PostgreSQL (Default)
 
 The docker-compose.yml includes a PostgreSQL container. Data is persisted in a Docker volume.
+The public app uses a restricted DB user by default (`public_app`) for read access to `Device`/`Message`, message inserts, and scan inserts (no scan-history reads).
 
 #### Option 2: External PostgreSQL
 
 Comment out the `db` service in docker-compose.yml and set your external database URL:
 
 ```bash
-# In .env
+# In .env (admin)
 DATABASE_URL=postgresql://user:password@your-host:5432/lostfound?sslmode=require
+
+# In .env (public)
+PUBLIC_DATABASE_URL=postgresql://public_app:public_app_password@your-host:5432/lostfound?sslmode=require
 ```
 
 ### Notification Services
@@ -172,22 +178,6 @@ QR Finder uses [Apprise](https://github.com/caronc/apprise) URLs for notificatio
 | Slack    | `slack://TokenA/TokenB/TokenC`                      |
 
 See the [Apprise Wiki](https://github.com/caronc/apprise/wiki) for 80+ more services.
-
-### Spam Protection (Optional)
-
-Cloudflare Turnstile provides captcha protection for the public message form.
-
-1. Get keys from [Cloudflare Turnstile](https://dash.cloudflare.com/turnstile)
-2. Add to .env:
-
-```bash
-NEXT_PUBLIC_TURNSTILE_SITE_KEY=your-site-key
-TURNSTILE_SECRET_KEY=your-secret-key
-```
-
-If not configured, the form will work without captcha.
-
----
 
 ## Exposing to the Internet
 
@@ -333,29 +323,29 @@ For local development without Docker:
 
 - Node.js 18+
 - PostgreSQL (or use SQLite for quick testing)
-- Yarn
+- npm
 
 ### Steps
 
 ```bash
 # Install dependencies
-yarn install
+npm install
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your settings
 
 # Generate Prisma client
-yarn prisma generate
+npx prisma generate
 
 # Push database schema
-yarn prisma db push
+npx prisma db push
 
 # Seed admin user
-yarn prisma db seed
+npx prisma db seed
 
 # Start dev server
-yarn dev
+npm run dev
 ```
 
 ---
@@ -364,31 +354,25 @@ yarn dev
 
 | Variable                         | Required  | Default     | Description                          |
 | -------------------------------- | --------- | ----------- | ------------------------------------ |
-| `DATABASE_URL`                   | Yes       | -           | PostgreSQL connection string         |
+| `DATABASE_URL`                   | Yes       | -           | PostgreSQL connection string (admin) |
+| `PUBLIC_DATABASE_URL`            | No        | -           | PostgreSQL connection string (public) |
+| `PUBLIC_DB_PASSWORD`             | No        | `public_app_password` | Public DB user password |
+| `ADMIN_INTERNAL_URL`             | No        | `http://admin:3000` | Internal admin URL for public notifications |
+| `INTERNAL_NOTIFY_SECRET`         | No        | -           | Shared secret for internal notifications |
 | `POSTGRES_PASSWORD`              | Docker    | `changeme`  | PostgreSQL password (docker-compose) |
 | `NEXTAUTH_URL`                   | Yes       | -           | Your app's public URL                |
 | `NEXTAUTH_SECRET`                | Yes       | -           | Session encryption secret            |
-| `STORAGE_TYPE`                   | No        | `local`     | `local` or `s3`                      |
-| `AWS_BUCKET_NAME`                | S3 only   | -           | S3 bucket name                       |
-| `AWS_REGION`                     | S3 only   | `us-east-1` | AWS region                           |
-| `AWS_ACCESS_KEY_ID`              | S3 only   | -           | AWS access key                       |
-| `AWS_SECRET_ACCESS_KEY`          | S3 only   | -           | AWS secret key                       |
-| `AWS_ENDPOINT`                   | S3-compat | -           | Custom S3 endpoint (MinIO, etc.)     |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No        | -           | Cloudflare Turnstile site key        |
-| `TURNSTILE_SECRET_KEY`           | No        | -           | Cloudflare Turnstile secret          |
-
----
-
+| `STORAGE_TYPE`                   | No        | `local`     | Local file storage                   |
 ## Backup & Restore
 
 ### Database Backup
 
 ```bash
 # Backup
-docker-compose exec db pg_dump -U lostfound lostfound > backup.sql
+docker compose exec db pg_dump -U lostfound lostfound > backup.sql
 
 # Restore
-cat backup.sql | docker-compose exec -T db psql -U lostfound lostfound
+cat backup.sql | docker compose exec -T db psql -U lostfound lostfound
 ```
 
 ### File Storage Backup
@@ -410,10 +394,10 @@ tar -xzf uploads-backup.tar.gz
 git pull
 
 # Rebuild and restart
-docker-compose up -d --build
+docker compose up -d --build
 
 # Run any database migrations
-docker-compose exec app npx prisma db push
+docker compose exec admin npx prisma db push
 ```
 
 ---
@@ -425,8 +409,7 @@ docker-compose exec app npx prisma db push
 - **Auth**: NextAuth.js (credentials provider)
 - **Styling**: Tailwind CSS + shadcn/ui
 - **QR Generation**: qrcode library
-- **File Storage**: Local filesystem or AWS S3
-- **Captcha**: Cloudflare Turnstile (optional)
+- **File Storage**: Local filesystem
 - **Notifications**: Apprise-compatible URLs
 
 ---

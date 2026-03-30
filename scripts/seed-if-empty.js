@@ -17,10 +17,48 @@ async function waitForDb(retries, delayMs) {
   }
 }
 
+function getDbName() {
+  try {
+    const url = new URL(process.env.DATABASE_URL || "");
+    const name = url.pathname?.replace(/^\//, "");
+    return name || "lostfound";
+  } catch {
+    return "lostfound";
+  }
+}
+
+function quoteIdent(value) {
+  return `"${String(value).replace(/"/g, "\"\"")}"`;
+}
+
+function quoteLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+async function ensurePublicUserGrants() {
+  const dbName = getDbName();
+  const publicPassword = process.env.PUBLIC_DB_PASSWORD || "public_app_password";
+
+  // Create role if missing (no-op if it exists)
+  await prisma.$executeRawUnsafe(
+    `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'public_app') THEN CREATE ROLE public_app LOGIN PASSWORD ${quoteLiteral(publicPassword)}; END IF; END $$;`
+  );
+
+  await prisma.$executeRawUnsafe(`GRANT CONNECT ON DATABASE ${quoteIdent(dbName)} TO public_app;`);
+  await prisma.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO public_app;`);
+  await prisma.$executeRawUnsafe(`GRANT SELECT ON TABLE "Device" TO public_app;`);
+  await prisma.$executeRawUnsafe(`GRANT SELECT ON TABLE "Message" TO public_app;`);
+  await prisma.$executeRawUnsafe(`GRANT INSERT ON TABLE "Message" TO public_app;`);
+  await prisma.$executeRawUnsafe(`REVOKE ALL ON TABLE "DeviceScan" FROM public_app;`);
+  await prisma.$executeRawUnsafe(`GRANT INSERT ON TABLE "DeviceScan" TO public_app;`);
+}
+
 async function seedIfEmpty() {
   console.log("Checking if database needs seeding...");
 
   await waitForDb(10, 1000);
+
+  await ensurePublicUserGrants();
 
   const userCount = await prisma.user.count();
   if (userCount > 0) {

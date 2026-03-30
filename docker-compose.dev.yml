@@ -1,0 +1,19 @@
+services:
+  admin:
+    volumes:
+      - ./:/apps
+      - /apps/node_modules
+      - /apps/apps/admin/.next
+      - ./uploads:/apps/uploads
+    command: sh -c "npm install && npm --workspace apps/admin run dev"
+    dns:
+      - 192.168.0.251
+  public:
+    volumes:
+      - ./:/apps
+      - /apps/node_modules
+      - /apps/apps/public/.next
+      - ./uploads:/apps/uploads
+    command: sh -c "npm install && npm --workspace apps/public run dev"
+    dns:
+      - 192.168.0.251
